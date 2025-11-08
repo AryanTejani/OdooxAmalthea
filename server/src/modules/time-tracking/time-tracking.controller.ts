@@ -474,6 +474,7 @@ export async function startTimerController(req: Request, res: Response): Promise
       projectId: input.projectId || undefined,
       description: input.description || undefined,
       billable: input.billable !== undefined ? input.billable : true,
+      userId,
     });
     
     res.status(201).json({ data: timeLog });
@@ -524,7 +525,7 @@ export async function stopTimerController(req: Request, res: Response): Promise<
       return;
     }
     
-    const timeLog = await timeTrackingService.stopTimer(employee.id);
+    const timeLog = await timeTrackingService.stopTimer(employee.id, userId);
     
     if (!timeLog) {
       res.status(404).json({
@@ -553,6 +554,44 @@ export async function stopTimerController(req: Request, res: Response): Promise<
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Failed to stop timer',
+      },
+    });
+  }
+}
+
+export async function heartbeatController(req: Request, res: Response): Promise<void> {
+  try {
+    const userId = req.user!.userId;
+    const employee = await orgService.getEmployeeByUserId(userId);
+    
+    if (!employee) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Employee not found',
+        },
+      });
+      return;
+    }
+    
+    const result = await timeTrackingService.heartbeat(employee.id, userId);
+    res.json({ data: result });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('No active timer')) {
+      res.status(400).json({
+        error: {
+          code: 'NO_ACTIVE_TIMER',
+          message: error.message,
+        },
+      });
+      return;
+    }
+    
+    logger.error({ error }, 'Failed to send heartbeat');
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to send heartbeat',
       },
     });
   }

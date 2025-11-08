@@ -469,6 +469,11 @@ export const hrmsApi = {
     return response.data.data;
   },
 
+  heartbeat: async (): Promise<any> => {
+    const response = await api.post<{ data: any }>('/api/time-tracking/time-logs/heartbeat');
+    return response.data.data;
+  },
+
   createTimeLog: async (data: {
     taskId?: string;
     projectId?: string;

@@ -1,4 +1,5 @@
 import * as timeTrackingRepo from './time-tracking.repo';
+import { attendanceService } from '../attendance/attendance.service';
 import { notifyChannel } from '../../libs/pg';
 import { logger } from '../../config/logger';
 
@@ -167,6 +168,7 @@ export const timeTrackingService = {
     projectId?: string;
     description?: string;
     billable?: boolean;
+    userId: string;
   }) {
     // Check if there's an active timer
     const activeTimer = await timeTrackingRepo.getActiveTimeLog(data.employeeId);
@@ -174,15 +176,24 @@ export const timeTrackingService = {
       throw new Error('You already have an active timer. Please stop it first.');
     }
     
+    const startTime = new Date();
     const timeLog = await timeTrackingRepo.createTimeLog({
       employeeId: data.employeeId,
       taskId: data.taskId || null,
       projectId: data.projectId || null,
       description: data.description || null,
-      startTime: new Date(),
+      startTime,
       endTime: null,
       billable: data.billable !== undefined ? data.billable : true,
     });
+    
+    // Auto-create/update attendance (punch in)
+    try {
+      await attendanceService.punchIn(data.employeeId, data.userId, startTime);
+    } catch (error) {
+      logger.error({ error, employeeId: data.employeeId }, 'Failed to update attendance on timer start');
+      // Don't fail the timer start if attendance update fails
+    }
     
     await notifyChannel('realtime', {
       table: 'time_logs',
@@ -199,7 +210,7 @@ export const timeTrackingService = {
     return timeLog;
   },
 
-  async stopTimer(employeeId: string) {
+  async stopTimer(employeeId: string, userId: string) {
     const activeTimer = await timeTrackingRepo.getActiveTimeLog(employeeId);
     if (!activeTimer) {
       throw new Error('No active timer found.');
@@ -212,7 +223,15 @@ export const timeTrackingService = {
       endTime,
     });
     
+    // Auto-update attendance (punch out)
     if (updated) {
+      try {
+        await attendanceService.punchOut(employeeId, userId, endTime);
+      } catch (error) {
+        logger.error({ error, employeeId }, 'Failed to update attendance on timer stop');
+        // Don't fail the timer stop if attendance update fails
+      }
+      
       await notifyChannel('realtime', {
         table: 'time_logs',
         op: 'UPDATE',
@@ -226,6 +245,49 @@ export const timeTrackingService = {
     }
     
     return updated;
+  },
+
+  async heartbeat(employeeId: string, userId: string) {
+    // Check if there's an active timer
+    const activeTimer = await timeTrackingRepo.getActiveTimeLog(employeeId);
+    if (!activeTimer) {
+      throw new Error('No active timer found.');
+    }
+    
+    // Update attendance to keep it active (refresh in_at if needed, but don't change it)
+    // This acts as a heartbeat to show the employee is still active
+    try {
+      // Get today's attendance
+      const { attendanceRepo } = await import('../attendance/attendance.repo');
+      const todayAttendance = await attendanceRepo.getTodayByEmployeeId(employeeId);
+      
+      // If attendance exists and has inAt but no outAt, update the updated_at timestamp
+      // This will be used to determine "Idle" status (no activity in last X minutes)
+      if (todayAttendance && todayAttendance.inAt && !todayAttendance.outAt) {
+        // Update the updated_at timestamp to track last activity
+        const { query } = await import('../../libs/db');
+        await query(
+          `UPDATE attendance SET updated_at = NOW() WHERE id = $1`,
+          [todayAttendance.id]
+        );
+        
+        // Notify realtime
+        await notifyChannel('realtime', {
+          table: 'attendance',
+          op: 'UPDATE',
+          row: {
+            id: todayAttendance.id,
+            employeeId: todayAttendance.employeeId,
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      }
+    } catch (error) {
+      logger.error({ error, employeeId }, 'Failed to update attendance heartbeat');
+      // Don't throw error, heartbeat is best-effort
+    }
+    
+    return { success: true, activeTimer: { id: activeTimer.id, startTime: activeTimer.startTime } };
   },
 
   async createTimeLog(data: {

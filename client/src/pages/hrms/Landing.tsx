@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 import { EmployeeCard, EmployeeGridItem } from '@/components/hrms/EmployeeCard';
 import { EmployeeProfileModal } from '@/components/hrms/EmployeeProfileModal';
-import { CheckInOutPanel } from '@/components/hrms/CheckInOutPanel';
 import { UserAvatarDropdown } from '@/components/hrms/UserAvatarDropdown';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -26,17 +25,20 @@ export function Landing() {
     queryFn: () => hrmsApi.getEmployeesGrid(search || undefined),
   });
 
-  // Subscribe to realtime updates for attendance and leave requests
+  // Subscribe to realtime updates for attendance, time logs, and leave requests
   useWS({
     onMessage: (event) => {
       if (event.table === 'attendance' && event.op) {
+        queryClient.invalidateQueries({ queryKey: ['employees', 'grid'] });
+      }
+      if (event.table === 'time_logs' && event.op) {
         queryClient.invalidateQueries({ queryKey: ['employees', 'grid'] });
       }
       if (event.table === 'leaveRequest' && event.op) {
         queryClient.invalidateQueries({ queryKey: ['employees', 'grid'] });
       }
     },
-    filter: (event) => event.table === 'attendance' || event.table === 'leaveRequest',
+    filter: (event) => event.table === 'attendance' || event.table === 'time_logs' || event.table === 'leaveRequest',
   });
 
   const handleEmployeeClick = (employee: EmployeeGridItem) => {
@@ -103,11 +105,6 @@ export function Landing() {
             </div>
           )}
         </main>
-
-        {/* Right Sidebar */}
-        <aside className="w-80 p-6 border-l border-gray-200 bg-white">
-          <CheckInOutPanel />
-        </aside>
       </div>
 
       {/* Employee Profile Modal */}

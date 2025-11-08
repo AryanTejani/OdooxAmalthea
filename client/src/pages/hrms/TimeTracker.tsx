@@ -85,6 +85,9 @@ export function TimeTracker() {
     queryFn: () => hrmsApi.getMyTasks(),
   });
 
+  // Calculate if timer is running (needed before useEffect)
+  const isTimerRunning = !!activeTimer && !activeTimer.endTime;
+
   // Subscribe to realtime updates
   useWS({
     onMessage: (event) => {
@@ -92,9 +95,46 @@ export function TimeTracker() {
         queryClient.invalidateQueries({ queryKey: ['time-logs'] });
         refetchActiveTimer();
       }
+      if (event.table === 'attendance' && event.op) {
+        queryClient.invalidateQueries({ queryKey: ['employees', 'grid'] });
+      }
     },
-    filter: (event) => event.table === 'time_logs',
+    filter: (event) => event.table === 'time_logs' || event.table === 'attendance',
   });
+
+  // Heartbeat: Send heartbeat every 5 minutes while timer is running
+  useEffect(() => {
+    if (!isTimerRunning) return;
+
+    const sendHeartbeat = async () => {
+      try {
+        await hrmsApi.heartbeat();
+        queryClient.invalidateQueries({ queryKey: ['employees', 'grid'] });
+      } catch (error) {
+        // Silently fail - heartbeat is best-effort
+        console.warn('Heartbeat failed:', error);
+      }
+    };
+
+    // Send immediate heartbeat when timer starts
+    sendHeartbeat();
+
+    // Send heartbeat every 5 minutes
+    const heartbeatInterval = setInterval(sendHeartbeat, 5 * 60 * 1000);
+
+    // Send heartbeat when page becomes visible (user returns to tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        sendHeartbeat();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isTimerRunning, queryClient]);
 
   const startTimerMutation = useMutation({
     mutationFn: () => hrmsApi.startTimer({
@@ -105,8 +145,10 @@ export function TimeTracker() {
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['time-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', 'grid'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
       refetchActiveTimer();
-      toast.success('Timer started!');
+      toast.success('Timer started! Attendance automatically recorded.');
       setDescription('');
     },
     onError: (error) => {
@@ -118,8 +160,10 @@ export function TimeTracker() {
     mutationFn: () => hrmsApi.stopTimer(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['time-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', 'grid'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
       refetchActiveTimer();
-      toast.success('Timer stopped!');
+      toast.success('Timer stopped! Attendance automatically updated.');
       setSelectedProjectId('');
       setSelectedTaskId('');
       setDescription('');
@@ -131,10 +175,8 @@ export function TimeTracker() {
 
   const elapsedTime = useElapsedTime(
     activeTimer?.startTime || null,
-    !!activeTimer && !activeTimer.endTime
+    isTimerRunning
   );
-
-  const isTimerRunning = !!activeTimer && !activeTimer.endTime;
 
   // Filter tasks to show only my tasks or all tasks from selected project
   const availableTasks = selectedProjectId 

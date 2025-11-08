@@ -29,6 +29,7 @@ router.get('/time-logs/active', timeTrackingController.getActiveTimerController)
 router.get('/time-logs/:id', timeTrackingController.getTimeLogByIdController);
 router.post('/time-logs/start', timeTrackingController.startTimerController); // Start timer
 router.post('/time-logs/stop', timeTrackingController.stopTimerController); // Stop timer
+router.post('/time-logs/heartbeat', timeTrackingController.heartbeatController); // Heartbeat
 router.post('/time-logs', timeTrackingController.createTimeLogController); // Manual time log
 router.put('/time-logs/:id', timeTrackingController.updateTimeLogController);
 router.delete('/time-logs/:id', timeTrackingController.deleteTimeLogController);
