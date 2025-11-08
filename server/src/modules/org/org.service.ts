@@ -160,6 +160,10 @@ export const orgService = {
   async getAllEmployees() {
     return orgRepo.getAllEmployees();
   },
+
+  async getEmployeesGrid(search?: string) {
+    return orgRepo.getEmployeesGrid(search);
+  },
 };
 
 

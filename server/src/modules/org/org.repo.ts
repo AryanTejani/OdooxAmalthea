@@ -1,6 +1,5 @@
-import { query, tx } from '../../libs/db';
-import { PoolClient } from 'pg';
-import { CreateOrgUnitInput, CreateEmployeeInput, OrgUnit, Employee, SalaryConfig } from '../../domain/types';
+import { query } from '../../libs/db';
+import { Employee, OrgUnit, SalaryConfig, CreateOrgUnitInput } from '../../domain/types';
 
 interface OrgUnitWithRelations extends OrgUnit {
   parent?: OrgUnit | null;
@@ -286,74 +285,46 @@ export async function getEmployeeByUserId(userId: string): Promise<EmployeeWithR
 /**
  * Create employee with optional salary config (transaction)
  */
-export async function createEmployee(data: CreateEmployeeInput): Promise<EmployeeWithRelations> {
-  return tx(async (client: PoolClient) => {
-    // Create employee
-    const employeeResult = await client.query(
-      `INSERT INTO employees (user_id, org_unit_id, code, title, join_date) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING id, user_id, org_unit_id, code, title, join_date, created_at, updated_at`,
-      [data.userId, data.orgUnitId || null, data.code, data.title || null, new Date(data.joinDate)]
+export async function createEmployee(data: {
+  userId: string;
+  orgUnitId: string | null;
+  code: string;
+  title: string | null;
+  joinDate: Date;
+  salaryConfig?: {
+    basic: number;
+    allowances: Record<string, unknown>;
+  } | null;
+}): Promise<EmployeeWithRelations> {
+  const employeeResult = await query(
+    `INSERT INTO employees (user_id, org_unit_id, code, title, join_date) 
+     VALUES ($1, $2, $3, $4, $5) 
+     RETURNING id, user_id, org_unit_id, code, title, join_date, created_at, updated_at`,
+    [data.userId, data.orgUnitId, data.code, data.title, data.joinDate]
+  );
+  
+  const empRow = employeeResult.rows[0];
+  const employee: EmployeeWithRelations = {
+    id: empRow.id,
+    userId: empRow.user_id,
+    orgUnitId: empRow.org_unit_id,
+    code: empRow.code,
+    title: empRow.title,
+    joinDate: empRow.join_date,
+    createdAt: empRow.created_at,
+    updatedAt: empRow.updated_at,
+  };
+  
+  // Create salary config if provided
+  if (data.salaryConfig) {
+    await query(
+      `INSERT INTO salary_config (employee_id, basic, allowances) 
+       VALUES ($1, $2, $3)`,
+      [employee.id, data.salaryConfig.basic, JSON.stringify(data.salaryConfig.allowances || {})]
     );
-    
-    const empRow = employeeResult.rows[0];
-    const employee: Employee = {
-      id: empRow.id,
-      userId: empRow.user_id,
-      orgUnitId: empRow.org_unit_id,
-      code: empRow.code,
-      title: empRow.title,
-      joinDate: empRow.join_date,
-      createdAt: empRow.created_at,
-      updatedAt: empRow.updated_at,
-    };
-    
-    // Create salary config if provided
-    let salaryConfig: SalaryConfig | null = null;
-    if (data.salaryConfig) {
-      const salaryResult = await client.query(
-        `INSERT INTO salary_config (employee_id, basic, allowances) 
-         VALUES ($1, $2, $3) 
-         RETURNING id, employee_id, basic, allowances, created_at, updated_at`,
-        [employee.id, data.salaryConfig.basic, JSON.stringify(data.salaryConfig.allowances || {})]
-      );
-      
-      const salaryRow = salaryResult.rows[0];
-      salaryConfig = {
-        id: salaryRow.id,
-        employeeId: salaryRow.employee_id,
-        basic: parseFloat(salaryRow.basic),
-        allowances: salaryRow.allowances || {},
-        createdAt: salaryRow.created_at,
-        updatedAt: salaryRow.updated_at,
-      };
-    }
-    
-    // Get org unit if exists
-    let orgUnit: OrgUnit | null = null;
-    if (employee.orgUnitId) {
-      const orgResult = await client.query(
-        'SELECT id, name, parent_id, created_at, updated_at FROM org_units WHERE id = $1',
-        [employee.orgUnitId]
-      );
-      if (orgResult.rows.length > 0) {
-        const orgRow = orgResult.rows[0];
-        orgUnit = {
-          id: orgRow.id,
-          name: orgRow.name,
-          parentId: orgRow.parent_id,
-          createdAt: orgRow.created_at,
-          updatedAt: orgRow.updated_at,
-        };
-      }
-    }
-    
-    return {
-      ...employee,
-      orgUnit,
-      salaryCfg: salaryConfig,
-    };
-  });
+  }
+  
+  return employee;
 }
 
 /**
@@ -456,6 +427,73 @@ export async function getAllEmployees(): Promise<EmployeeWithRelations[]> {
   });
 }
 
+/**
+ * Get employees grid with current status (present/absent/leave)
+ */
+export async function getEmployeesGrid(search?: string): Promise<any[]> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split('T')[0];
+  
+  let sql = `
+    SELECT DISTINCT ON (e.id)
+      e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+      u.name as user_name, u.email as user_email,
+      o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at,
+      a.id as attendance_id, a.status as attendance_status, a.in_at, a.out_at,
+      CASE 
+        WHEN EXISTS (
+          SELECT 1 FROM leave_requests l 
+          WHERE l.employee_id = e.id 
+          AND l.status = 'APPROVED' 
+          AND l.start_date <= $1::date 
+          AND l.end_date >= $1::date
+        ) THEN 'leave'
+        WHEN a.status = 'PRESENT' AND a.in_at IS NOT NULL AND a.out_at IS NULL THEN 'present'
+        WHEN a.status = 'PRESENT' AND a.in_at IS NOT NULL AND a.out_at IS NOT NULL THEN 'present'
+        WHEN a.status = 'ABSENT' OR a.id IS NULL THEN 'absent'
+        ELSE 'absent'
+      END as status
+    FROM employees e
+    INNER JOIN users u ON e.user_id = u.id
+    LEFT JOIN org_units o ON e.org_unit_id = o.id
+    LEFT JOIN attendance a ON e.id = a.employee_id AND a.day = $1
+  `;
+  
+  const params: any[] = [todayStr];
+  
+  if (search) {
+    sql += ` WHERE (u.name ILIKE $${params.length + 1} OR u.email ILIKE $${params.length + 1} OR e.code ILIKE $${params.length + 1})`;
+    params.push(`%${search}%`);
+  }
+  
+  sql += ` ORDER BY e.id, e.code ASC`;
+  
+  const result = await query(sql, params);
+  
+  return result.rows.map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    code: row.code,
+    title: row.title,
+    joinDate: row.join_date,
+    userName: row.user_name,
+    userEmail: row.user_email,
+    orgUnit: row.org_id ? {
+      id: row.org_id,
+      name: row.org_name,
+      parentId: row.org_parent_id,
+      createdAt: row.org_created_at,
+      updatedAt: row.org_updated_at,
+    } : null,
+    status: row.status, // 'present', 'absent', 'leave'
+    attendanceId: row.attendance_id,
+    attendanceStatus: row.attendance_status,
+    inAt: row.in_at,
+    outAt: row.out_at,
+  }));
+}
+
 export const orgRepo = {
   getOrgUnits,
   createOrgUnit,
@@ -464,4 +502,5 @@ export const orgRepo = {
   createEmployee,
   getEmployeesByOrgUnit,
   getAllEmployees,
+  getEmployeesGrid,
 };

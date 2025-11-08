@@ -10,12 +10,16 @@ import { Login } from '@/pages/Login';
 import { Register } from '@/pages/Register';
 import { Profile } from '@/pages/Profile';
 import { FirstLogin } from '@/pages/FirstLogin';
+import { Landing } from '@/pages/hrms/Landing';
 import { Dashboard } from '@/pages/hrms/Dashboard';
 import { Attendance } from '@/pages/hrms/Attendance';
 import { Leave } from '@/pages/hrms/Leave';
 import { LeaveApprovals } from '@/pages/hrms/LeaveApprovals';
 import { Payroll } from '@/pages/hrms/Payroll';
 import { Employees } from '@/pages/hrms/Employees';
+import { TimeTracker } from '@/pages/hrms/TimeTracker';
+import { Timeline } from '@/pages/hrms/Timeline';
+import { TimeLogs } from '@/pages/hrms/TimeLogs';
 
 function App() {
   return (
@@ -23,7 +27,14 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<Navigate to="/hrms/dashboard" replace />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Landing />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route
@@ -102,6 +113,36 @@ function App() {
                     <Employees />
                   </HRMSLayout>
                 </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/time-tracker"
+              element={
+                <ProtectedRoute>
+                  <HRMSLayout>
+                    <TimeTracker />
+                  </HRMSLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/timeline"
+              element={
+                <ProtectedRoute>
+                  <HRMSLayout>
+                    <Timeline />
+                  </HRMSLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/time-logs"
+              element={
+                <RoleProtectedRoute allowedRoles={['admin', 'hr']} feature="Time Logs">
+                  <HRMSLayout>
+                    <TimeLogs />
+                  </HRMSLayout>
+                </RoleProtectedRoute>
               }
             />
             <Route path="*" element={<Navigate to="/hrms/dashboard" replace />} />

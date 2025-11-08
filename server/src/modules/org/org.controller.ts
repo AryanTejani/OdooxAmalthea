@@ -117,4 +117,20 @@ export async function getAllEmployeesController(req: Request, res: Response): Pr
   }
 }
 
+export async function getEmployeesGridController(req: Request, res: Response): Promise<void> {
+  try {
+    const search = req.query.search as string | undefined;
+    const employees = await orgService.getEmployeesGrid(search);
+    res.json({ data: employees });
+  } catch (error) {
+    logger.error({ error }, 'Failed to get employees grid');
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch employees grid',
+      },
+    });
+  }
+}
+
 

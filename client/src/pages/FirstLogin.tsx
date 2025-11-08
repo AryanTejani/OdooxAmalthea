@@ -54,7 +54,7 @@ export function FirstLogin() {
       setIsLoading(true);
       await changePassword(data.currentPassword, data.newPassword);
       toast.success('Password changed successfully!');
-      navigate('/hrms/dashboard');
+      navigate('/');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to change password');
     } finally {

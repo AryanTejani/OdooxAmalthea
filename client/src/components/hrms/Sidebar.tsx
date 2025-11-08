@@ -10,6 +10,9 @@ import {
   User,
   LogOut,
   Clock,
+  Timer,
+  FolderKanban,
+  ListTodo,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -34,9 +37,38 @@ const navItems: NavItem[] = [
     icon: Clock,
   },
   {
+    title: 'Time Tracker',
+    href: '/hrms/time-tracker',
+    icon: Timer,
+  },
+  {
+    title: 'Timeline',
+    href: '/hrms/timeline',
+    icon: Calendar,
+  },
+  {
     title: 'Leave',
     href: '/hrms/leave',
     icon: Calendar,
+  },
+  {
+    title: 'Projects',
+    href: '/hrms/projects',
+    icon: FolderKanban,
+    roles: ['admin', 'hr'],
+  },
+  {
+    title: 'Tasks',
+    href: '/hrms/tasks',
+    icon: ListTodo,
+    roles: ['admin', 'hr'],
+  },
+  {
+    title: 'Time Logs',
+    href: '/hrms/time-logs',
+    icon: Timer,
+    roles: ['admin', 'hr'],
+    badge: 'HR',
   },
   {
     title: 'Leave Approvals',

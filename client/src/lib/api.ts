@@ -266,6 +266,12 @@ export const hrmsApi = {
     return response.data.data;
   },
 
+  getEmployeesGrid: async (search?: string): Promise<any[]> => {
+    const params = search ? { search } : {};
+    const response = await api.get<{ data: any[] }>('/api/employees/grid', { params });
+    return response.data.data;
+  },
+
   // Attendance
   punchIn: async (data?: { inAt?: string }): Promise<Attendance> => {
     const response = await api.post<{ data: Attendance }>('/api/attendance/punch-in', data);
@@ -357,6 +363,138 @@ export const hrmsApi = {
     if (entity) params.entity = entity;
     const response = await api.get<{ data: Activity[] }>('/api/activity/latest', { params });
     return response.data.data;
+  },
+
+  // Time Tracking - Projects
+  getProjects: async (): Promise<any[]> => {
+    const response = await api.get<{ data: any[] }>('/api/time-tracking/projects');
+    return response.data.data;
+  },
+
+  getProjectById: async (id: string): Promise<any> => {
+    const response = await api.get<{ data: any }>(`/api/time-tracking/projects/${id}`);
+    return response.data.data;
+  },
+
+  createProject: async (data: { name: string; description?: string; status?: string }): Promise<any> => {
+    const response = await api.post<{ data: any }>('/api/time-tracking/projects', data);
+    return response.data.data;
+  },
+
+  updateProject: async (id: string, data: { name?: string; description?: string; status?: string }): Promise<any> => {
+    const response = await api.put<{ data: any }>(`/api/time-tracking/projects/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteProject: async (id: string): Promise<void> => {
+    await api.delete(`/api/time-tracking/projects/${id}`);
+  },
+
+  // Time Tracking - Tasks
+  getTasksByProject: async (projectId: string): Promise<any[]> => {
+    const response = await api.get<{ data: any[] }>(`/api/time-tracking/projects/${projectId}/tasks`);
+    return response.data.data;
+  },
+
+  getMyTasks: async (): Promise<any[]> => {
+    const response = await api.get<{ data: any[] }>('/api/time-tracking/tasks/me');
+    return response.data.data;
+  },
+
+  getTaskById: async (id: string): Promise<any> => {
+    const response = await api.get<{ data: any }>(`/api/time-tracking/tasks/${id}`);
+    return response.data.data;
+  },
+
+  createTask: async (data: {
+    projectId: string;
+    employeeId?: string;
+    title: string;
+    description?: string;
+    status?: string;
+    priority?: string;
+    dueDate?: string;
+  }): Promise<any> => {
+    const response = await api.post<{ data: any }>('/api/time-tracking/tasks', data);
+    return response.data.data;
+  },
+
+  updateTask: async (id: string, data: {
+    title?: string;
+    description?: string;
+    status?: string;
+    priority?: string;
+    dueDate?: string | null;
+    employeeId?: string | null;
+  }): Promise<any> => {
+    const response = await api.put<{ data: any }>(`/api/time-tracking/tasks/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteTask: async (id: string): Promise<void> => {
+    await api.delete(`/api/time-tracking/tasks/${id}`);
+  },
+
+  // Time Tracking - Time Logs
+  getTimeLogs: async (filters?: {
+    employeeId?: string;
+    projectId?: string;
+    taskId?: string;
+    startDate?: string;
+    endDate?: string;
+    billable?: boolean;
+  }): Promise<any[]> => {
+    const params = filters || {};
+    const response = await api.get<{ data: any[] }>('/api/time-tracking/time-logs', { params });
+    return response.data.data;
+  },
+
+  getActiveTimer: async (): Promise<any | null> => {
+    const response = await api.get<{ data: any | null }>('/api/time-tracking/time-logs/active');
+    return response.data.data;
+  },
+
+  startTimer: async (data: {
+    taskId?: string;
+    projectId?: string;
+    description?: string;
+    billable?: boolean;
+  }): Promise<any> => {
+    const response = await api.post<{ data: any }>('/api/time-tracking/time-logs/start', data);
+    return response.data.data;
+  },
+
+  stopTimer: async (): Promise<any> => {
+    const response = await api.post<{ data: any }>('/api/time-tracking/time-logs/stop');
+    return response.data.data;
+  },
+
+  createTimeLog: async (data: {
+    taskId?: string;
+    projectId?: string;
+    description?: string;
+    startTime: string;
+    endTime?: string;
+    billable?: boolean;
+  }): Promise<any> => {
+    const response = await api.post<{ data: any }>('/api/time-tracking/time-logs', data);
+    return response.data.data;
+  },
+
+  updateTimeLog: async (id: string, data: {
+    taskId?: string | null;
+    projectId?: string | null;
+    description?: string;
+    startTime?: string;
+    endTime?: string | null;
+    billable?: boolean;
+  }): Promise<any> => {
+    const response = await api.put<{ data: any }>(`/api/time-tracking/time-logs/${id}`, data);
+    return response.data.data;
+  },
+
+  deleteTimeLog: async (id: string): Promise<void> => {
+    await api.delete(`/api/time-tracking/time-logs/${id}`);
   },
 };
 
