@@ -14,6 +14,7 @@ import {
   FolderKanban,
   ListTodo,
   Key,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -94,6 +95,13 @@ const navItems: NavItem[] = [
     title: 'Reset Passwords',
     href: '/hrms/reset-passwords',
     icon: Key,
+    roles: ['admin'],
+    badge: 'Admin',
+  },
+  {
+    title: 'Settings',
+    href: '/hrms/settings/users',
+    icon: Settings,
     roles: ['admin'],
     badge: 'Admin',
   },

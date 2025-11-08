@@ -10,7 +10,7 @@ interface AuthContextType {
   register: (email: string, name: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -95,11 +95,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Change password
-  const changePassword = async (currentPassword: string, newPassword: string) => {
+  const changePassword = async (currentPassword: string, newPassword: string, confirmPassword: string) => {
     try {
       setLoading(true);
       setError(null);
-      const updatedUser = await authApi.changePassword({ currentPassword, newPassword });
+      const updatedUser = await authApi.changePassword({ currentPassword, newPassword, confirmPassword });
       setUser(updatedUser);
       setMustChangePassword(false);
     } catch (err) {

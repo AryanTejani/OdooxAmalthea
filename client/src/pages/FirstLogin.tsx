@@ -52,7 +52,7 @@ export function FirstLogin() {
   const onSubmit = async (data: ChangePasswordFormData) => {
     try {
       setIsLoading(true);
-      await changePassword(data.currentPassword, data.newPassword);
+      await changePassword(data.currentPassword, data.newPassword, data.confirmPassword);
       toast.success('Password changed successfully!');
       navigate('/');
     } catch (error) {

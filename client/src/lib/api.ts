@@ -604,6 +604,64 @@ export const hrmsApi = {
   },
 };
 
+// Admin API
+export const adminApi = {
+  getAllUsers: async (): Promise<Array<{
+    id: string;
+    name: string;
+    loginId: string | null;
+    email: string;
+    role: string;
+  }>> => {
+    const response = await api.get<{ data: Array<{
+      id: string;
+      name: string;
+      login_id: string | null;
+      email: string;
+      role: string;
+    }> }>('/api/admin/users');
+    return response.data.data.map((user) => ({
+      id: user.id,
+      name: user.name,
+      loginId: user.login_id,
+      email: user.email,
+      role: user.role,
+    }));
+  },
+
+  updateUserRole: async (userId: string, role: 'employee' | 'admin' | 'hr' | 'payroll'): Promise<{
+    id: string;
+    name: string;
+    loginId: string | null;
+    email: string;
+    role: string;
+  }> => {
+    console.log('Calling API to update user role:', { userId, role, url: `/api/admin/users/${userId}/role` });
+    try {
+      const response = await api.patch<{ data: {
+        id: string;
+        name: string;
+        login_id: string | null;
+        email: string;
+        role: string;
+      } }>(`/api/admin/users/${userId}/role`, { role });
+      console.log('API response:', response.data);
+      const result = {
+        id: response.data.data.id,
+        name: response.data.data.name,
+        loginId: response.data.data.login_id,
+        email: response.data.data.email,
+        role: response.data.data.role,
+      };
+      console.log('Returning updated user:', result);
+      return result;
+    } catch (error) {
+      console.error('API error updating user role:', error);
+      throw error;
+    }
+  },
+};
+
 // Extract error message from API error
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {

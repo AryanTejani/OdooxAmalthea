@@ -21,6 +21,7 @@ import { TimeTracker } from '@/pages/hrms/TimeTracker';
 import { Timeline } from '@/pages/hrms/Timeline';
 import { TimeLogs } from '@/pages/hrms/TimeLogs';
 import { ResetPasswords } from '@/pages/hrms/ResetPasswords';
+import { SettingsUsers } from '@/pages/hrms/SettingsUsers';
 
 function App() {
   return (
@@ -152,6 +153,16 @@ function App() {
                 <RoleProtectedRoute allowedRoles={['admin']} feature="Reset Passwords">
                   <HRMSLayout>
                     <ResetPasswords />
+                  </HRMSLayout>
+                </RoleProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/settings/users"
+              element={
+                <RoleProtectedRoute allowedRoles={['admin']} feature="User Access Settings">
+                  <HRMSLayout>
+                    <SettingsUsers />
                   </HRMSLayout>
                 </RoleProtectedRoute>
               }
