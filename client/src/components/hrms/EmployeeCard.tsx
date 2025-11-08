@@ -13,7 +13,7 @@ export interface EmployeeGridItem {
     id: string;
     name: string;
   } | null;
-  status: 'present' | 'absent' | 'leave';
+  status: 'active' | 'idle' | 'off' | 'leave';
   inAt?: string | null;
   outAt?: string | null;
 }
@@ -27,24 +27,32 @@ export function EmployeeCard({ employee, onClick }: EmployeeCardProps) {
   const getStatusIndicator = () => {
     if (employee.status === 'leave') {
       return (
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 right-2" title="On Leave">
           <Plane className="h-4 w-4 text-blue-500" />
         </div>
       );
     }
     
-    if (employee.status === 'present') {
+    if (employee.status === 'active') {
       return (
-        <div className="absolute top-2 right-2">
-          <div className="h-3 w-3 rounded-full bg-green-500 border-2 border-white shadow-sm" />
+        <div className="absolute top-2 right-2" title="Active">
+          <div className="h-3 w-3 rounded-full bg-green-500 border-2 border-white shadow-sm animate-pulse" />
         </div>
       );
     }
     
-    // absent
+    if (employee.status === 'idle') {
+      return (
+        <div className="absolute top-2 right-2" title="Idle">
+          <div className="h-3 w-3 rounded-full bg-yellow-500 border-2 border-white shadow-sm" />
+        </div>
+      );
+    }
+    
+    // off
     return (
-      <div className="absolute top-2 right-2">
-        <div className="h-3 w-3 rounded-full bg-yellow-500 border-2 border-white shadow-sm" />
+      <div className="absolute top-2 right-2" title="Off">
+        <div className="h-3 w-3 rounded-full bg-gray-400 border-2 border-white shadow-sm" />
       </div>
     );
   };

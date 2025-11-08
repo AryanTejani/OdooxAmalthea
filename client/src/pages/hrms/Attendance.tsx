@@ -1,12 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
-import { PunchCard } from '@/components/hrms/PunchCard';
 import { TeamBoard } from '@/components/hrms/TeamBoard';
 import { hrmsApi } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
+import { Timer, Info } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export function Attendance() {
+  const navigate = useNavigate();
   const today = new Date().toISOString().split('T')[0];
   const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
 
@@ -29,10 +33,59 @@ export function Attendance() {
 
   return (
     <div className="space-y-6 p-6">
-      <h1 className="text-3xl font-bold">Attendance</h1>
+      <div>
+        <h1 className="text-3xl font-bold">Attendance</h1>
+        <p className="text-muted-foreground mt-1">
+          Your attendance is automatically recorded when you start/stop time tracking
+        </p>
+      </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <PunchCard todayAttendance={todayAttendance} />
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertTitle>Time Tracker Integration</AlertTitle>
+        <AlertDescription className="mt-2">
+          Attendance is automatically created and updated based on your time tracker activity.
+          <br />
+          <Button
+            variant="link"
+            className="p-0 h-auto mt-2"
+            onClick={() => navigate('/hrms/time-tracker')}
+          >
+            <Timer className="mr-2 h-4 w-4" />
+            Go to Time Tracker
+          </Button>
+        </AlertDescription>
+      </Alert>
+
+      {todayAttendance && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Today's Attendance</CardTitle>
+            <CardDescription>
+              {todayAttendance.inAt && (
+                <>Checked in at {new Date(todayAttendance.inAt).toLocaleTimeString()}</>
+              )}
+              {todayAttendance.outAt && (
+                <> • Checked out at {new Date(todayAttendance.outAt).toLocaleTimeString()}</>
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4">
+              <Badge variant={todayAttendance.status === 'PRESENT' ? 'default' : 'secondary'}>
+                {todayAttendance.status}
+              </Badge>
+              {todayAttendance.inAt && !todayAttendance.outAt && (
+                <span className="text-sm text-muted-foreground">
+                  Currently checked in - Timer is running
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-6 md:grid-cols-1">
         <TeamBoard day={today} />
       </div>
 

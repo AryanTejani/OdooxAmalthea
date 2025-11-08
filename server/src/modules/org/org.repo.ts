@@ -440,7 +440,8 @@ export async function getEmployeesGrid(search?: string): Promise<any[]> {
       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
       u.name as user_name, u.email as user_email,
       o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at,
-      a.id as attendance_id, a.status as attendance_status, a.in_at, a.out_at,
+      a.id as attendance_id, a.status as attendance_status, a.in_at, a.out_at, a.updated_at as attendance_updated_at,
+      tl.id as active_timer_id, tl.start_time as timer_start_time,
       CASE 
         WHEN EXISTS (
           SELECT 1 FROM leave_requests l 
@@ -449,21 +450,32 @@ export async function getEmployeesGrid(search?: string): Promise<any[]> {
           AND l.start_date <= $1::date 
           AND l.end_date >= $1::date
         ) THEN 'leave'
-        WHEN a.status = 'PRESENT' AND a.in_at IS NOT NULL AND a.out_at IS NULL THEN 'present'
-        WHEN a.status = 'PRESENT' AND a.in_at IS NOT NULL AND a.out_at IS NOT NULL THEN 'present'
-        WHEN a.status = 'ABSENT' OR a.id IS NULL THEN 'absent'
-        ELSE 'absent'
+        WHEN tl.id IS NOT NULL AND a.updated_at IS NOT NULL AND a.updated_at > NOW() - INTERVAL '15 minutes' THEN 'active'
+        WHEN tl.id IS NOT NULL THEN 'idle'
+        WHEN a.status = 'PRESENT' AND a.in_at IS NOT NULL AND a.out_at IS NULL THEN 'active'
+        WHEN a.status = 'PRESENT' AND a.in_at IS NOT NULL AND a.out_at IS NOT NULL THEN 'off'
+        WHEN a.status = 'ABSENT' OR a.id IS NULL THEN 'off'
+        ELSE 'off'
       END as status
     FROM employees e
     INNER JOIN users u ON e.user_id = u.id
     LEFT JOIN org_units o ON e.org_unit_id = o.id
     LEFT JOIN attendance a ON e.id = a.employee_id AND a.day = $1
+    LEFT JOIN LATERAL (
+      SELECT id, start_time 
+      FROM time_logs 
+      WHERE employee_id = e.id 
+        AND end_time IS NULL 
+      ORDER BY start_time DESC 
+      LIMIT 1
+    ) tl ON true
+    WHERE 1=1
   `;
   
   const params: any[] = [todayStr];
   
   if (search) {
-    sql += ` WHERE (u.name ILIKE $${params.length + 1} OR u.email ILIKE $${params.length + 1} OR e.code ILIKE $${params.length + 1})`;
+    sql += ` AND (u.name ILIKE $${params.length + 1} OR u.email ILIKE $${params.length + 1} OR e.code ILIKE $${params.length + 1})`;
     params.push(`%${search}%`);
   }
   
@@ -486,11 +498,13 @@ export async function getEmployeesGrid(search?: string): Promise<any[]> {
       createdAt: row.org_created_at,
       updatedAt: row.org_updated_at,
     } : null,
-    status: row.status, // 'present', 'absent', 'leave'
+    status: row.status, // 'active', 'idle', 'off', 'leave'
     attendanceId: row.attendance_id,
     attendanceStatus: row.attendance_status,
     inAt: row.in_at,
     outAt: row.out_at,
+    activeTimerId: row.active_timer_id,
+    timerStartTime: row.timer_start_time,
   }));
 }
 
