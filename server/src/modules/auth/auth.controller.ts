@@ -122,10 +122,18 @@ export async function refreshController(
 ): Promise<void> {
   try {
     // Get refresh token from cookie
-    const refreshToken = req.cookies.refresh_token;
+    const refreshToken = req.cookies?.refresh_token;
 
     if (!refreshToken) {
-      throw new AppError('NO_REFRESH_TOKEN', 'Refresh token not found', 401);
+      // No refresh token - user is not authenticated
+      // Return 401 without throwing error (expected scenario)
+      res.status(401).json({
+        error: {
+          code: 'NO_REFRESH_TOKEN',
+          message: 'No refresh token found. Please log in.',
+        },
+      });
+      return;
     }
 
     // Get user agent and IP

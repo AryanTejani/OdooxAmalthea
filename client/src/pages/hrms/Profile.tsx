@@ -45,133 +45,106 @@ export function Profile() {
     enabled: !!authUser,
   });
 
-  // Get salary configuration if admin/payroll and has employee
-  const canViewSalary = user && (user.role === 'admin' || user.role === 'payroll') && user.employee;
-  const canEditSalary = user && (user.role === 'admin' || user.role === 'payroll') && user.employee;
-  const { data: salaryConfig, isLoading: isLoadingSalaryConfig } = useQuery({
-    queryKey: ['employee', 'salary-config', user?.employee?.id],
-    queryFn: () => hrmsApi.getSalaryConfiguration(user!.employee!.id),
-    enabled: !!canViewSalary,
+  // Role-based access control (memoized to prevent unnecessary re-renders)
+  const isAdminOrPayroll = useMemo(() => {
+    return user ? (user.role === 'admin' || user.role === 'payroll') : false;
+  }, [user]);
+  
+  const isEmployeeOrHR = useMemo(() => {
+    return user ? (user.role === 'employee' || user.role === 'hr') : false;
+  }, [user]);
+  
+  const canViewSalary = useMemo(() => {
+    return user ? (isAdminOrPayroll || isEmployeeOrHR) : false;
+  }, [user, isAdminOrPayroll, isEmployeeOrHR]);
+  
+  const canEditSalary = isAdminOrPayroll;
+  
+  // For admin/payroll: selected employee ID (default to own employee if exists)
+  // For employees/HR: always use own employee ID
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [editingSalary, setEditingSalary] = useState(false);
+  
+  // Salary edit form state
+  const [editBasic, setEditBasic] = useState<number>(0);
+  const [editHRA, setEditHRA] = useState<number>(0);
+  const [editStandardAllowance, setEditStandardAllowance] = useState<number>(0);
+  const [editPerformanceBonus, setEditPerformanceBonus] = useState<number>(0);
+  const [editLTA, setEditLTA] = useState<number>(0);
+  const [editFixedAllowance, setEditFixedAllowance] = useState<number>(0);
+  
+  // Get employees list for admin/payroll to select from
+  const { data: employees, isLoading: isLoadingEmployees } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => hrmsApi.getAllEmployees(),
+    enabled: !!isAdminOrPayroll,
   });
-
-  // Salary configuration state (for editing)
-  const [editingSalaryConfig, setEditingSalaryConfig] = useState<{
-    wage: number;
-    componentConfig: Record<string, {
-      type: 'PERCENTAGE_OF_WAGE' | 'PERCENTAGE_OF_BASIC' | 'FIXED_AMOUNT' | 'REMAINING_AMOUNT';
-      value: number;
-    }>;
-    pfRate: number;
-    professionalTax: number;
-  } | null>(null);
-
-  // Initialize editing state when config loads
+  
+  // Determine which employee ID to use for salary query
+  const employeeIdForSalary = useMemo(() => {
+    if (isEmployeeOrHR) {
+      // Employees/HR can only see their own salary
+      return user?.employee?.id || null;
+    } else if (isAdminOrPayroll) {
+      // Admin/Payroll can select any employee
+      // Default to selected employee, or own employee, or first employee in list
+      if (selectedEmployeeId) {
+        return selectedEmployeeId;
+      }
+      if (user?.employee?.id) {
+        return user.employee.id;
+      }
+      if (employees && employees.length > 0) {
+        return employees[0].id;
+      }
+      return null;
+    }
+    return null;
+  }, [user, selectedEmployeeId, isAdminOrPayroll, isEmployeeOrHR, employees]);
+  
+  // Get salary configuration
+  const { data: salaryConfig, isLoading: isLoadingSalaryConfig } = useQuery({
+    queryKey: ['employee', 'salary-config', employeeIdForSalary],
+    queryFn: () => hrmsApi.getSalaryConfiguration(employeeIdForSalary!),
+    enabled: !!canViewSalary && !!employeeIdForSalary,
+  });
+  
+  // Update edit form when salary config loads or when entering edit mode
   useEffect(() => {
-    if (salaryConfig && canEditSalary) {
-      setEditingSalaryConfig({
-        wage: salaryConfig.wage,
-        componentConfig: { ...salaryConfig.componentConfig },
-        pfRate: salaryConfig.pfRate,
-        professionalTax: salaryConfig.professionalTax,
-      });
+    if (salaryConfig) {
+      setEditBasic(salaryConfig.basic || 0);
+      setEditHRA(salaryConfig.allowances?.hra || 0);
+      setEditStandardAllowance(salaryConfig.allowances?.standardAllowance || 0);
+      setEditPerformanceBonus(salaryConfig.allowances?.performanceBonus || 0);
+      setEditLTA(salaryConfig.allowances?.lta || 0);
+      setEditFixedAllowance(salaryConfig.allowances?.fixedAllowance || 0);
     }
-  }, [salaryConfig, canEditSalary]);
-
-  // Calculate salary components in real-time
-  const calculatedSalary = useMemo(() => {
-    if (!editingSalaryConfig) return null;
-
-    const { wage, componentConfig, pfRate, professionalTax } = editingSalaryConfig;
-
-    // Calculate Basic
-    const basicConfig = componentConfig.basic || { type: 'PERCENTAGE_OF_WAGE', value: 50 };
-    let basic = 0;
-    if (basicConfig.type === 'PERCENTAGE_OF_WAGE') {
-      basic = (wage * basicConfig.value) / 100;
-    } else if (basicConfig.type === 'FIXED_AMOUNT') {
-      basic = basicConfig.value;
-    } else {
-      basic = (wage * 50) / 100;
-    }
-
-    // Calculate other components
-    const allowances: Record<string, number> = {};
-    let calculatedTotal = basic;
-
-    const componentOrder = ['hra', 'standardAllowance', 'performanceBonus', 'lta'];
-    for (const componentName of componentOrder) {
-      const config = componentConfig[componentName];
-      if (!config) continue;
-
-      let amount = 0;
-      if (config.type === 'PERCENTAGE_OF_WAGE') {
-        amount = (wage * config.value) / 100;
-      } else if (config.type === 'PERCENTAGE_OF_BASIC') {
-        amount = (basic * config.value) / 100;
-      } else if (config.type === 'FIXED_AMOUNT') {
-        amount = config.value;
+  }, [salaryConfig]);
+  
+  // Initialize selectedEmployeeId for admin/payroll when employees load
+  useEffect(() => {
+    if (isAdminOrPayroll && employees && employees.length > 0 && !selectedEmployeeId) {
+      // Default to user's own employee if exists, otherwise first employee
+      const defaultEmployeeId = user?.employee?.id || employees[0]?.id;
+      if (defaultEmployeeId) {
+        setSelectedEmployeeId(defaultEmployeeId);
       }
-
-      allowances[componentName] = amount;
-      calculatedTotal += amount;
     }
+  }, [isAdminOrPayroll, employees, user, selectedEmployeeId]);
 
-    // Calculate Fixed Allowance (remaining amount)
-    const fixedAllowanceConfig = componentConfig.fixedAllowance;
-    if (fixedAllowanceConfig && fixedAllowanceConfig.type === 'REMAINING_AMOUNT') {
-      const fixedAllowance = wage - calculatedTotal;
-      allowances.fixedAllowance = Math.max(0, fixedAllowance);
-      calculatedTotal += allowances.fixedAllowance;
-    } else if (fixedAllowanceConfig) {
-      if (fixedAllowanceConfig.type === 'PERCENTAGE_OF_WAGE') {
-        allowances.fixedAllowance = (wage * fixedAllowanceConfig.value) / 100;
-      } else if (fixedAllowanceConfig.type === 'PERCENTAGE_OF_BASIC') {
-        allowances.fixedAllowance = (basic * fixedAllowanceConfig.value) / 100;
-      } else if (fixedAllowanceConfig.type === 'FIXED_AMOUNT') {
-        allowances.fixedAllowance = fixedAllowanceConfig.value;
-      }
-      calculatedTotal += allowances.fixedAllowance || 0;
-    }
-
-    const monthlyWage = wage;
-    const yearlyWage = monthlyWage * 12;
-    const pfEmployee = (basic * pfRate) / 100;
-    const pfEmployer = (basic * pfRate) / 100;
-    const netSalary = monthlyWage - pfEmployee - professionalTax;
-
-    return {
-      basic,
-      allowances,
-      monthlyWage,
-      yearlyWage,
-      pfEmployee,
-      pfEmployer,
-      netSalary,
-      totalComponents: calculatedTotal,
-    };
-  }, [editingSalaryConfig]);
-
-  // Update salary configuration mutation
-  const updateSalaryConfigMutation = useMutation({
-    mutationFn: (data: {
-      wage?: number;
-      componentConfig?: Record<string, {
-        type: 'PERCENTAGE_OF_WAGE' | 'PERCENTAGE_OF_BASIC' | 'FIXED_AMOUNT' | 'REMAINING_AMOUNT';
-        value: number;
-      }>;
-      pfRate?: number;
-      professionalTax?: number;
-    }) => hrmsApi.updateSalaryConfiguration(user!.employee!.id, data),
-    onSuccess: (updatedConfig) => {
-      queryClient.setQueryData(['employee', 'salary-config', user?.employee?.id], updatedConfig);
-      queryClient.invalidateQueries({ queryKey: ['employee', 'salary', user?.employee?.id] });
-      setEditingSalaryConfig({
-        wage: updatedConfig.wage,
-        componentConfig: { ...updatedConfig.componentConfig },
-        pfRate: updatedConfig.pfRate,
-        professionalTax: updatedConfig.professionalTax,
+  // Salary update mutation (must be before early returns per Rules of Hooks)
+  const updateSalaryMutation = useMutation({
+    mutationFn: async (data: { employeeId: string; basic: number; allowances: Record<string, number> }) => {
+      return hrmsApi.updateSalaryConfig(data.employeeId, {
+        basic: data.basic,
+        allowances: data.allowances,
       });
+    },
+    onSuccess: (_, variables) => {
+      // Use the employeeId from the mutation variables to invalidate the correct query
+      queryClient.invalidateQueries({ queryKey: ['employee', 'salary-config', variables.employeeId] });
       toast.success('Salary configuration updated successfully');
+      setEditingSalary(false);
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));
@@ -328,9 +301,43 @@ export function Profile() {
     return null;
   }
 
+  // Handler functions (defined after hooks but before render)
+  const handleSaveSalary = () => {
+    if (!employeeIdForSalary) {
+      toast.error('No employee selected');
+      return;
+    }
+    
+    const allowances: Record<string, number> = {};
+    if (editHRA > 0) allowances.HRA = editHRA;
+    if (editStandardAllowance > 0) allowances.standardAllowance = editStandardAllowance;
+    if (editPerformanceBonus > 0) allowances.performanceBonus = editPerformanceBonus;
+    if (editLTA > 0) allowances.lta = editLTA;
+    if (editFixedAllowance > 0) allowances.fixedAllowance = editFixedAllowance;
+    
+    updateSalaryMutation.mutate({
+      employeeId: employeeIdForSalary,
+      basic: editBasic,
+      allowances,
+    });
+  };
+  
+  const handleCancelEditSalary = () => {
+    setEditingSalary(false);
+    // Reset form to original values
+    if (salaryConfig) {
+      setEditBasic(salaryConfig.basic || 0);
+      setEditHRA(salaryConfig.allowances?.hra || 0);
+      setEditStandardAllowance(salaryConfig.allowances?.standardAllowance || 0);
+      setEditPerformanceBonus(salaryConfig.allowances?.performanceBonus || 0);
+      setEditLTA(salaryConfig.allowances?.lta || 0);
+      setEditFixedAllowance(salaryConfig.allowances?.fixedAllowance || 0);
+    }
+  };
+  
   // After the check above, user is guaranteed to be defined
-  const showSalaryTab = user.role === 'admin' || user.role === 'payroll';
-  const showCompanyTab = user.role === 'admin';
+  const showSalaryTab = canViewSalary;
+  const showCompanyTab = user?.role === 'admin';
 
   return (
     <div className="space-y-6 p-6">
@@ -600,582 +607,447 @@ export function Profile() {
           <TabsContent value="salary">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Salary Configuration</span>
-                  {canEditSalary && editingSalaryConfig && (
-                    <Button
-                      onClick={() => {
-                        if (!editingSalaryConfig) return;
-                        updateSalaryConfigMutation.mutate({
-                          wage: editingSalaryConfig.wage,
-                          componentConfig: editingSalaryConfig.componentConfig,
-                          pfRate: editingSalaryConfig.pfRate,
-                          professionalTax: editingSalaryConfig.professionalTax,
-                        });
-                      }}
-                      disabled={updateSalaryConfigMutation.isPending}
-                    >
-                      {updateSalaryConfigMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="mr-2 h-4 w-4" />
-                          Save Configuration
-                        </>
-                      )}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Salary Info</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {isAdminOrPayroll 
+                        ? 'View and edit salary information for employees (Admin/Payroll Officer)'
+                        : 'View your salary information (Read-only)'}
+                    </p>
+                  </div>
+                  {canEditSalary && !editingSalary && salaryConfig && (
+                    <Button onClick={() => setEditingSalary(true)}>
+                      <Edit2 className="h-4 w-4 mr-2" />
+                      Edit Salary
                     </Button>
                   )}
-                </CardTitle>
+                  {canEditSalary && editingSalary && (
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={handleCancelEditSalary}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSaveSalary} disabled={updateSalaryMutation.isPending}>
+                        {updateSalaryMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4 mr-2" />
+                            Save Changes
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
-                {isLoadingSalaryConfig ? (
+                {/* Employee Selector for Admin/Payroll - Always show if admin/payroll */}
+                {isAdminOrPayroll && (
+                  <div className="mb-6">
+                    <Label htmlFor="employee-select">Select Employee</Label>
+                    {isLoadingEmployees ? (
+                      <div className="mt-1 p-4 border rounded-lg">
+                        <p className="text-sm text-muted-foreground">Loading employees...</p>
+                      </div>
+                    ) : employees && employees.length > 0 ? (
+                      <Select
+                        value={selectedEmployeeId || employees[0]?.id || ''}
+                        onValueChange={(value) => {
+                          setSelectedEmployeeId(value);
+                          setEditingSalary(false); // Reset edit mode when switching employees
+                        }}
+                      >
+                        <SelectTrigger id="employee-select" className="mt-1">
+                          <SelectValue placeholder="Select an employee" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {employees.map((emp) => (
+                            <SelectItem key={emp.id} value={emp.id}>
+                              {emp.userName || 'Unknown'} ({emp.code}) - {emp.userEmail}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="mt-1 p-4 border rounded-lg bg-muted/50">
+                        <p className="text-sm text-muted-foreground">
+                          No employees found. Please create employees first.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {!employeeIdForSalary && isAdminOrPayroll ? (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">
+                      {employees && employees.length > 0
+                        ? 'Please select an employee to view their salary information.'
+                        : 'No employees available. Please create employees first.'}
+                    </p>
+                  </div>
+                ) : isLoadingSalaryConfig ? (
                   <div className="text-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-                    <p className="text-muted-foreground">Loading salary configuration...</p>
+                    <p className="text-muted-foreground">Loading salary information...</p>
                   </div>
-                ) : editingSalaryConfig && calculatedSalary ? (
-                  <div className="space-y-6">
-                    {/* Wage Configuration */}
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="wage">Monthly Wage (₹)</Label>
-                        <Input
-                          id="wage"
-                          type="number"
-                          value={editingSalaryConfig.wage}
-                          onChange={(e) => {
-                            const newWage = parseFloat(e.target.value) || 0;
-                            setEditingSalaryConfig({
-                              ...editingSalaryConfig,
-                              wage: newWage,
-                            });
-                          }}
-                          disabled={!canEditSalary}
-                          className="text-lg"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Monthly Wage</p>
-                          <p className="text-2xl font-bold">₹{calculatedSalary.monthlyWage.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Yearly Wage</p>
-                          <p className="text-2xl font-bold">₹{calculatedSalary.yearlyWage.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Component Configuration */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">Salary Components</h3>
-                      
-                      {/* Basic Salary */}
-                      <div className="grid grid-cols-3 gap-4 items-end">
-                        <div>
-                          <Label>Basic Salary</Label>
-                          <Select
-                            value={editingSalaryConfig.componentConfig.basic?.type || 'PERCENTAGE_OF_WAGE'}
-                            onValueChange={(value: any) => {
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  basic: {
-                                    type: value,
-                                    value: editingSalaryConfig.componentConfig.basic?.value || 50,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="PERCENTAGE_OF_WAGE">% of Wage</SelectItem>
-                              <SelectItem value="FIXED_AMOUNT">Fixed Amount</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>
-                            {editingSalaryConfig.componentConfig.basic?.type === 'FIXED_AMOUNT' ? 'Amount (₹)' : 'Percentage (%)'}
-                          </Label>
-                          <Input
-                            type="number"
-                            value={editingSalaryConfig.componentConfig.basic?.value || 50}
-                            onChange={(e) => {
-                              const newValue = parseFloat(e.target.value) || 0;
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  basic: {
-                                    type: editingSalaryConfig.componentConfig.basic?.type || 'PERCENTAGE_OF_WAGE',
-                                    value: newValue,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          />
-                        </div>
-                        <div>
-                          <Label>Calculated Amount</Label>
-                          <p className="text-lg font-semibold">₹{calculatedSalary.basic.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                        </div>
-                      </div>
-
-                      {/* HRA */}
-                      <div className="grid grid-cols-3 gap-4 items-end">
-                        <div>
-                          <Label>House Rent Allowance (HRA)</Label>
-                          <Select
-                            value={editingSalaryConfig.componentConfig.hra?.type || 'PERCENTAGE_OF_BASIC'}
-                            onValueChange={(value: any) => {
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  hra: {
-                                    type: value,
-                                    value: editingSalaryConfig.componentConfig.hra?.value || 50,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="PERCENTAGE_OF_WAGE">% of Wage</SelectItem>
-                              <SelectItem value="PERCENTAGE_OF_BASIC">% of Basic</SelectItem>
-                              <SelectItem value="FIXED_AMOUNT">Fixed Amount</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>
-                            {editingSalaryConfig.componentConfig.hra?.type === 'FIXED_AMOUNT' ? 'Amount (₹)' : 'Percentage (%)'}
-                          </Label>
-                          <Input
-                            type="number"
-                            value={editingSalaryConfig.componentConfig.hra?.value || 50}
-                            onChange={(e) => {
-                              const newValue = parseFloat(e.target.value) || 0;
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  hra: {
-                                    type: editingSalaryConfig.componentConfig.hra?.type || 'PERCENTAGE_OF_BASIC',
-                                    value: newValue,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          />
-                        </div>
-                        <div>
-                          <Label>Calculated Amount</Label>
-                          <p className="text-lg font-semibold">₹{calculatedSalary.allowances.hra?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}</p>
-                        </div>
-                      </div>
-
-                      {/* Standard Allowance */}
-                      <div className="grid grid-cols-3 gap-4 items-end">
-                        <div>
-                          <Label>Standard Allowance</Label>
-                          <Select
-                            value={editingSalaryConfig.componentConfig.standardAllowance?.type || 'FIXED_AMOUNT'}
-                            onValueChange={(value: any) => {
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  standardAllowance: {
-                                    type: value,
-                                    value: editingSalaryConfig.componentConfig.standardAllowance?.value || 4167,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="PERCENTAGE_OF_WAGE">% of Wage</SelectItem>
-                              <SelectItem value="PERCENTAGE_OF_BASIC">% of Basic</SelectItem>
-                              <SelectItem value="FIXED_AMOUNT">Fixed Amount</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>
-                            {editingSalaryConfig.componentConfig.standardAllowance?.type === 'FIXED_AMOUNT' ? 'Amount (₹)' : 'Percentage (%)'}
-                          </Label>
-                          <Input
-                            type="number"
-                            value={editingSalaryConfig.componentConfig.standardAllowance?.value || 4167}
-                            onChange={(e) => {
-                              const newValue = parseFloat(e.target.value) || 0;
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  standardAllowance: {
-                                    type: editingSalaryConfig.componentConfig.standardAllowance?.type || 'FIXED_AMOUNT',
-                                    value: newValue,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          />
-                        </div>
-                        <div>
-                          <Label>Calculated Amount</Label>
-                          <p className="text-lg font-semibold">₹{calculatedSalary.allowances.standardAllowance?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}</p>
-                        </div>
-                      </div>
-
-                      {/* Performance Bonus */}
-                      <div className="grid grid-cols-3 gap-4 items-end">
-                        <div>
-                          <Label>Performance Bonus</Label>
-                          <Select
-                            value={editingSalaryConfig.componentConfig.performanceBonus?.type || 'PERCENTAGE_OF_BASIC'}
-                            onValueChange={(value: any) => {
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  performanceBonus: {
-                                    type: value,
-                                    value: editingSalaryConfig.componentConfig.performanceBonus?.value || 8.33,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="PERCENTAGE_OF_WAGE">% of Wage</SelectItem>
-                              <SelectItem value="PERCENTAGE_OF_BASIC">% of Basic</SelectItem>
-                              <SelectItem value="FIXED_AMOUNT">Fixed Amount</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>
-                            {editingSalaryConfig.componentConfig.performanceBonus?.type === 'FIXED_AMOUNT' ? 'Amount (₹)' : 'Percentage (%)'}
-                          </Label>
-                          <Input
-                            type="number"
-                            value={editingSalaryConfig.componentConfig.performanceBonus?.value || 8.33}
-                            onChange={(e) => {
-                              const newValue = parseFloat(e.target.value) || 0;
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  performanceBonus: {
-                                    type: editingSalaryConfig.componentConfig.performanceBonus?.type || 'PERCENTAGE_OF_BASIC',
-                                    value: newValue,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          />
-                        </div>
-                        <div>
-                          <Label>Calculated Amount</Label>
-                          <p className="text-lg font-semibold">₹{calculatedSalary.allowances.performanceBonus?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}</p>
-                        </div>
-                      </div>
-
-                      {/* Leave Travel Allowance (LTA) */}
-                      <div className="grid grid-cols-3 gap-4 items-end">
-                        <div>
-                          <Label>Leave Travel Allowance (LTA)</Label>
-                          <Select
-                            value={editingSalaryConfig.componentConfig.lta?.type || 'PERCENTAGE_OF_BASIC'}
-                            onValueChange={(value: any) => {
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  lta: {
-                                    type: value,
-                                    value: editingSalaryConfig.componentConfig.lta?.value || 8.333,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="PERCENTAGE_OF_WAGE">% of Wage</SelectItem>
-                              <SelectItem value="PERCENTAGE_OF_BASIC">% of Basic</SelectItem>
-                              <SelectItem value="FIXED_AMOUNT">Fixed Amount</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>
-                            {editingSalaryConfig.componentConfig.lta?.type === 'FIXED_AMOUNT' ? 'Amount (₹)' : 'Percentage (%)'}
-                          </Label>
-                          <Input
-                            type="number"
-                            value={editingSalaryConfig.componentConfig.lta?.value || 8.333}
-                            onChange={(e) => {
-                              const newValue = parseFloat(e.target.value) || 0;
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  lta: {
-                                    type: editingSalaryConfig.componentConfig.lta?.type || 'PERCENTAGE_OF_BASIC',
-                                    value: newValue,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          />
-                        </div>
-                        <div>
-                          <Label>Calculated Amount</Label>
-                          <p className="text-lg font-semibold">₹{calculatedSalary.allowances.lta?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}</p>
-                        </div>
-                      </div>
-
-                      {/* Fixed Allowance (Remaining Amount) */}
-                      <div className="grid grid-cols-3 gap-4 items-end">
-                        <div>
-                          <Label>Fixed Allowance</Label>
-                          <Select
-                            value={editingSalaryConfig.componentConfig.fixedAllowance?.type || 'REMAINING_AMOUNT'}
-                            onValueChange={(value: any) => {
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  fixedAllowance: {
-                                    type: value,
-                                    value: editingSalaryConfig.componentConfig.fixedAllowance?.value || 0,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="REMAINING_AMOUNT">Remaining Amount</SelectItem>
-                              <SelectItem value="PERCENTAGE_OF_WAGE">% of Wage</SelectItem>
-                              <SelectItem value="PERCENTAGE_OF_BASIC">% of Basic</SelectItem>
-                              <SelectItem value="FIXED_AMOUNT">Fixed Amount</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>
-                            {editingSalaryConfig.componentConfig.fixedAllowance?.type === 'REMAINING_AMOUNT' 
-                              ? 'Auto-calculated' 
-                              : editingSalaryConfig.componentConfig.fixedAllowance?.type === 'FIXED_AMOUNT' 
-                                ? 'Amount (₹)' 
-                                : 'Percentage (%)'}
-                          </Label>
-                          <Input
-                            type="number"
-                            value={editingSalaryConfig.componentConfig.fixedAllowance?.value || 0}
-                            onChange={(e) => {
-                              const newValue = parseFloat(e.target.value) || 0;
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                componentConfig: {
-                                  ...editingSalaryConfig.componentConfig,
-                                  fixedAllowance: {
-                                    type: editingSalaryConfig.componentConfig.fixedAllowance?.type || 'REMAINING_AMOUNT',
-                                    value: newValue,
-                                  },
-                                },
-                              });
-                            }}
-                            disabled={!canEditSalary || editingSalaryConfig.componentConfig.fixedAllowance?.type === 'REMAINING_AMOUNT'}
-                          />
-                        </div>
-                        <div>
-                          <Label>Calculated Amount</Label>
-                          <p className="text-lg font-semibold">₹{calculatedSalary.allowances.fixedAllowance?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}</p>
-                        </div>
-                      </div>
-
-                      {/* Summary Table */}
-                      <div className="mt-6">
-                        <h4 className="text-md font-semibold mb-2">Component Summary</h4>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Component</TableHead>
-                              <TableHead className="text-right">Amount (₹)</TableHead>
-                              <TableHead className="text-right">% of Wage</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            <TableRow>
-                              <TableCell>Basic Salary</TableCell>
-                              <TableCell className="text-right">₹{calculatedSalary.basic.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
-                              <TableCell className="text-right">
-                                {((calculatedSalary.basic / calculatedSalary.monthlyWage) * 100).toFixed(2)}%
-                              </TableCell>
-                            </TableRow>
-                            {Object.entries(calculatedSalary.allowances).map(([key, value]) => (
-                              <TableRow key={key}>
-                                <TableCell>{key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}</TableCell>
-                                <TableCell className="text-right">₹{value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
-                                <TableCell className="text-right">
-                                  {((value / calculatedSalary.monthlyWage) * 100).toFixed(2)}%
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                            <TableRow className="font-semibold">
-                              <TableCell>Total</TableCell>
-                              <TableCell className="text-right">₹{calculatedSalary.totalComponents.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
-                              <TableCell className="text-right">
-                                {((calculatedSalary.totalComponents / calculatedSalary.monthlyWage) * 100).toFixed(2)}%
-                              </TableCell>
-                            </TableRow>
-                          </TableBody>
-                        </Table>
-                        {calculatedSalary.totalComponents > calculatedSalary.monthlyWage + 1 && (
-                          <p className="text-sm text-red-600 mt-2">
-                            Warning: Total components exceed wage by ₹{(calculatedSalary.totalComponents - calculatedSalary.monthlyWage).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* PF Configuration */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">Provident Fund (PF) Configuration</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="pfRate">PF Rate (%)</Label>
-                          <Input
-                            id="pfRate"
-                            type="number"
-                            step="0.01"
-                            value={editingSalaryConfig.pfRate}
-                            onChange={(e) => {
-                              const newRate = parseFloat(e.target.value) || 0;
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                pfRate: newRate,
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          />
-                        </div>
-                        <div>
-                          <Label>PF Employee Contribution</Label>
-                          <p className="text-lg font-semibold">₹{calculatedSalary.pfEmployee.toLocaleString('en-IN', { minimumFractionDigits: 2 })} / month</p>
-                        </div>
-                        <div>
-                          <Label>PF Employer Contribution</Label>
-                          <p className="text-lg font-semibold">₹{calculatedSalary.pfEmployer.toLocaleString('en-IN', { minimumFractionDigits: 2 })} / month</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Professional Tax Configuration */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">Tax Deductions</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="professionalTax">Professional Tax (₹)</Label>
-                          <Input
-                            id="professionalTax"
-                            type="number"
-                            step="0.01"
-                            value={editingSalaryConfig.professionalTax}
-                            onChange={(e) => {
-                              const newTax = parseFloat(e.target.value) || 0;
-                              setEditingSalaryConfig({
-                                ...editingSalaryConfig,
-                                professionalTax: newTax,
-                              });
-                            }}
-                            disabled={!canEditSalary}
-                          />
-                        </div>
-                        <div>
-                          <Label>Professional Tax</Label>
-                          <p className="text-lg font-semibold">₹{editingSalaryConfig.professionalTax.toLocaleString('en-IN', { minimumFractionDigits: 2 })} / month</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Net Salary Summary */}
-                    <div className="pt-4 border-t">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-2">Net Salary</p>
-                          <p className="text-3xl font-bold text-green-600">₹{calculatedSalary.netSalary.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                        </div>
-                        {canEditSalary && (
-                          <Button
-                            onClick={() => {
-                              if (!editingSalaryConfig) return;
-                              updateSalaryConfigMutation.mutate({
-                                wage: editingSalaryConfig.wage,
-                                componentConfig: editingSalaryConfig.componentConfig,
-                                pfRate: editingSalaryConfig.pfRate,
-                                professionalTax: editingSalaryConfig.professionalTax,
-                              });
-                            }}
-                            disabled={updateSalaryConfigMutation.isPending}
-                            size="lg"
-                          >
-                            {updateSalaryConfigMutation.isPending ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Saving...
-                              </>
-                            ) : (
-                              <>
-                                <Save className="mr-2 h-4 w-4" />
-                                Save Configuration
-                              </>
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+                ) : !employeeIdForSalary ? (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">No employee record found. Please contact admin.</p>
+                  </div>
+                ) : !salaryConfig ? (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">
+                      Salary configuration not available for this employee. Please configure salary first.
+                    </p>
                   </div>
                 ) : (
-                  <div className="text-center py-12">
-                    <p className="text-muted-foreground">Salary configuration not available</p>
+                  <div className="space-y-6">
+                    
+                    {/* General Salary Information - Top Section */}
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Left Column - Wage and Working Days */}
+                      <div className="space-y-4">
+                        <div>
+                          <Label className="text-sm font-medium">Month Wage</Label>
+                          <div className="mt-1 flex items-baseline gap-2">
+                            <Input 
+                              value={salaryConfig.monthlyWage.toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                              disabled 
+                              className="text-lg font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent"
+                            />
+                            <span className="text-muted-foreground">/ Month</span>
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">Yearly wage</Label>
+                          <div className="mt-1 flex items-baseline gap-2">
+                            <Input 
+                              value={salaryConfig.yearlyWage.toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                              disabled 
+                              className="text-lg font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent"
+                            />
+                            <span className="text-muted-foreground">/ Yearly</span>
+                          </div>
+                        </div>
+                        <div className="border-t pt-4 space-y-4">
+                          <div>
+                            <Label className="text-sm font-medium">No of working days in a week:</Label>
+                            <Input value="5" disabled className="mt-1 border-0 border-b-2 rounded-none px-0 bg-transparent" />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">Break Time:</Label>
+                            <div className="mt-1 flex items-center gap-2">
+                              <Input value="1" disabled className="w-20 border-0 border-b-2 rounded-none px-0 bg-transparent" />
+                              <span className="text-muted-foreground">/hrs</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Column - Empty for layout balance */}
+                      <div></div>
+                    </div>
+
+                    {/* Salary Components - Left Column */}
+                    <div className="border-t pt-6">
+                      <h3 className="text-lg font-semibold mb-4">Salary Components</h3>
+                      <div className="space-y-4">
+                        {/* Basic Salary */}
+                        <div className="border-b pb-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <Label className="text-base font-medium">Basic Salary</Label>
+                              <div className="mt-1 flex items-baseline gap-2">
+                                {editingSalary && canEditSalary ? (
+                                  <Input 
+                                    type="number"
+                                    value={editBasic}
+                                    onChange={(e) => setEditBasic(parseFloat(e.target.value) || 0)}
+                                    className="text-base font-semibold border-b-2 rounded-none px-0 bg-transparent w-32"
+                                  />
+                                ) : (
+                                  <Input 
+                                    value={salaryConfig.basic.toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                                    disabled 
+                                    className="text-base font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent w-32"
+                                  />
+                                )}
+                                <span className="text-muted-foreground">₹ / month</span>
+                                {!editingSalary && (
+                                  <span className="text-muted-foreground ml-4">
+                                    {((salaryConfig.basic / salaryConfig.monthlyWage) * 100).toFixed(2)} %
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Define Basic salary from company cost compute it based on monthly Wages
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* HRA */}
+                        {(salaryConfig.allowances.hra || editingSalary) && (
+                          <div className="border-b pb-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <Label className="text-base font-medium">House Rent Allowance</Label>
+                                <div className="mt-1 flex items-baseline gap-2">
+                                  {editingSalary && canEditSalary ? (
+                                    <Input 
+                                      type="number"
+                                      value={editHRA}
+                                      onChange={(e) => setEditHRA(parseFloat(e.target.value) || 0)}
+                                      className="text-base font-semibold border-b-2 rounded-none px-0 bg-transparent w-32"
+                                    />
+                                  ) : (
+                                    <Input 
+                                      value={(salaryConfig.allowances.hra || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                                      disabled 
+                                      className="text-base font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent w-32"
+                                    />
+                                  )}
+                                  <span className="text-muted-foreground">₹ / month</span>
+                                  {!editingSalary && salaryConfig.allowances.hra && (
+                                    <span className="text-muted-foreground ml-4">
+                                      {((salaryConfig.allowances.hra / salaryConfig.monthlyWage) * 100).toFixed(2)} %
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  HRA provided to employees 50% of the basic salary
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Standard Allowance */}
+                        {(salaryConfig.allowances.standardAllowance || editingSalary) && (
+                          <div className="border-b pb-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <Label className="text-base font-medium">Standard Allowance</Label>
+                                <div className="mt-1 flex items-baseline gap-2">
+                                  {editingSalary && canEditSalary ? (
+                                    <Input 
+                                      type="number"
+                                      value={editStandardAllowance}
+                                      onChange={(e) => setEditStandardAllowance(parseFloat(e.target.value) || 0)}
+                                      className="text-base font-semibold border-b-2 rounded-none px-0 bg-transparent w-32"
+                                    />
+                                  ) : (
+                                    <Input 
+                                      value={(salaryConfig.allowances.standardAllowance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                                      disabled 
+                                      className="text-base font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent w-32"
+                                    />
+                                  )}
+                                  <span className="text-muted-foreground">₹ / month</span>
+                                  {!editingSalary && salaryConfig.allowances.standardAllowance && (
+                                    <span className="text-muted-foreground ml-4">
+                                      {((salaryConfig.allowances.standardAllowance / salaryConfig.monthlyWage) * 100).toFixed(2)} %
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  A standard allowance is a predetermined, fixed amount provided to employee as part of their salary
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Performance Bonus */}
+                        {(salaryConfig.allowances.performanceBonus || editingSalary) && (
+                          <div className="border-b pb-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <Label className="text-base font-medium">Performance Bonus</Label>
+                                <div className="mt-1 flex items-baseline gap-2">
+                                  {editingSalary && canEditSalary ? (
+                                    <Input 
+                                      type="number"
+                                      value={editPerformanceBonus}
+                                      onChange={(e) => setEditPerformanceBonus(parseFloat(e.target.value) || 0)}
+                                      className="text-base font-semibold border-b-2 rounded-none px-0 bg-transparent w-32"
+                                    />
+                                  ) : (
+                                    <Input 
+                                      value={(salaryConfig.allowances.performanceBonus || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                                      disabled 
+                                      className="text-base font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent w-32"
+                                    />
+                                  )}
+                                  <span className="text-muted-foreground">₹ / month</span>
+                                  {!editingSalary && salaryConfig.allowances.performanceBonus && (
+                                    <span className="text-muted-foreground ml-4">
+                                      {((salaryConfig.allowances.performanceBonus / salaryConfig.monthlyWage) * 100).toFixed(2)} %
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  Variable amount paid during payroll. The value defined by the company and calculated as a % of the basic salary
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* LTA */}
+                        {(salaryConfig.allowances.lta || editingSalary) && (
+                          <div className="border-b pb-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <Label className="text-base font-medium">Leave Travel Allowance</Label>
+                                <div className="mt-1 flex items-baseline gap-2">
+                                  {editingSalary && canEditSalary ? (
+                                    <Input 
+                                      type="number"
+                                      value={editLTA}
+                                      onChange={(e) => setEditLTA(parseFloat(e.target.value) || 0)}
+                                      className="text-base font-semibold border-b-2 rounded-none px-0 bg-transparent w-32"
+                                    />
+                                  ) : (
+                                    <Input 
+                                      value={(salaryConfig.allowances.lta || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                                      disabled 
+                                      className="text-base font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent w-32"
+                                    />
+                                  )}
+                                  <span className="text-muted-foreground">₹ / month</span>
+                                  {!editingSalary && salaryConfig.allowances.lta && (
+                                    <span className="text-muted-foreground ml-4">
+                                      {((salaryConfig.allowances.lta / salaryConfig.monthlyWage) * 100).toFixed(2)} %
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  LTA is paid by the company to employees to cover their travel expenses. and calculated as a % of the basic salary
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Fixed Allowance */}
+                        {(salaryConfig.allowances.fixedAllowance || editingSalary) && (
+                          <div className="border-b pb-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <Label className="text-base font-medium">Fixed Allowance</Label>
+                                <div className="mt-1 flex items-baseline gap-2">
+                                  {editingSalary && canEditSalary ? (
+                                    <Input 
+                                      type="number"
+                                      value={editFixedAllowance}
+                                      onChange={(e) => setEditFixedAllowance(parseFloat(e.target.value) || 0)}
+                                      className="text-base font-semibold border-b-2 rounded-none px-0 bg-transparent w-32"
+                                    />
+                                  ) : (
+                                    <Input 
+                                      value={(salaryConfig.allowances.fixedAllowance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                                      disabled 
+                                      className="text-base font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent w-32"
+                                    />
+                                  )}
+                                  <span className="text-muted-foreground">₹ / month</span>
+                                  {!editingSalary && salaryConfig.allowances.fixedAllowance && (
+                                    <span className="text-muted-foreground ml-4">
+                                      {((salaryConfig.allowances.fixedAllowance / salaryConfig.monthlyWage) * 100).toFixed(2)} %
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  fixed allowance portion of wages is determined after calculating all salary components
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* PF Contribution and Tax Deductions - Bottom Section */}
+                    <div className="grid grid-cols-2 gap-6 border-t pt-6">
+                      {/* Left Column - PF Contribution */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold">Provident Fund (PF) Contribution</h3>
+                        
+                        <div className="border-b pb-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <Label className="text-base font-medium">Employee</Label>
+                              <div className="mt-1 flex items-baseline gap-2">
+                                <Input 
+                                  value={salaryConfig.pfEmployee.toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                                  disabled 
+                                  className="text-base font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent w-32"
+                                />
+                                <span className="text-muted-foreground">₹ / month</span>
+                                <span className="text-muted-foreground ml-4">
+                                  {salaryConfig.pfRate.toFixed(2)} %
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-2">
+                                PF is calculated based on the basic salary
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-b pb-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <Label className="text-base font-medium">Employer</Label>
+                              <div className="mt-1 flex items-baseline gap-2">
+                                <Input 
+                                  value={salaryConfig.pfEmployer.toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                                  disabled 
+                                  className="text-base font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent w-32"
+                                />
+                                <span className="text-muted-foreground">₹ / month</span>
+                                <span className="text-muted-foreground ml-4">
+                                  {salaryConfig.pfRate.toFixed(2)} %
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-2">
+                                PF is calculated based on the basic salary
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Column - Tax Deductions */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold">Tax Deductions</h3>
+                        
+                        <div className="border-b pb-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <Label className="text-base font-medium">Professional Tax</Label>
+                              <div className="mt-1 flex items-baseline gap-2">
+                                <Input 
+                                  value={salaryConfig.professionalTax.toLocaleString('en-IN', { minimumFractionDigits: 2 })} 
+                                  disabled 
+                                  className="text-base font-semibold border-0 border-b-2 rounded-none px-0 bg-transparent w-32"
+                                />
+                                <span className="text-muted-foreground">₹ / month</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Professional Tax deducted from the Gross salary
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </CardContent>

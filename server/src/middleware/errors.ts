@@ -26,7 +26,64 @@ export function errorHandler(
   // Generate request ID for tracking
   const reqId = req.headers['x-request-id'] || 'unknown';
   
-  // Log the error
+  // Handle known AppError first
+  if (err instanceof AppError) {
+    // These are expected auth errors - log at warn level instead of error
+    const expectedAuthErrors = [
+      'NO_REFRESH_TOKEN',
+      'SESSION_REVOKED',
+      'SESSION_EXPIRED', 
+      'SESSION_NOT_FOUND',
+      'INVALID_REFRESH_TOKEN',
+      'UNAUTHORIZED',
+    ];
+    
+    const isExpectedAuthError = expectedAuthErrors.includes(err.code);
+    
+    // Log at appropriate level
+    if (isExpectedAuthError) {
+      logger.warn(
+        {
+          reqId,
+          error: {
+            name: err.name,
+            message: err.message,
+            code: err.code,
+          },
+          path: req.path,
+          method: req.method,
+        },
+        'Expected auth error'
+      );
+    } else {
+      logger.error(
+        {
+          reqId,
+          error: {
+            name: err.name,
+            message: err.message,
+            code: err.code,
+            stack: err.stack,
+          },
+          path: req.path,
+          method: req.method,
+          userId: req.user?.userId,
+        },
+        'Request error'
+      );
+    }
+    
+    res.status(err.statusCode).json({
+      error: {
+        code: err.code,
+        message: err.message,
+        ...(err.details && { details: err.details }),
+      },
+    });
+    return;
+  }
+  
+  // Log unexpected errors at error level
   logger.error(
     {
       reqId,
@@ -41,18 +98,6 @@ export function errorHandler(
     },
     'Request error'
   );
-
-  // Handle known AppError
-  if (err instanceof AppError) {
-    res.status(err.statusCode).json({
-      error: {
-        code: err.code,
-        message: err.message,
-        ...(err.details && { details: err.details }),
-      },
-    });
-    return;
-  }
 
   // Handle Zod validation errors
   if (err instanceof ZodError) {

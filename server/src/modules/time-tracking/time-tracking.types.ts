@@ -27,6 +27,7 @@ export interface TimeLog {
   employeeId: string;
   taskId: string | null;
   projectId: string | null;
+  taskName: string | null; // Manual task name entered by user
   description: string | null;
   startTime: Date;
   endTime: Date | null;
@@ -42,8 +43,6 @@ export interface TaskWithProject extends Task {
 }
 
 export interface TimeLogWithDetails extends TimeLog {
-  task?: Task;
-  project?: Project;
   employeeName?: string;
   employeeCode?: string;
 }

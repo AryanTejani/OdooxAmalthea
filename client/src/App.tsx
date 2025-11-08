@@ -19,7 +19,12 @@ import { AttendanceAdmin } from '@/pages/hrms/AttendanceAdmin';
 import { AttendanceMe } from '@/pages/hrms/AttendanceMe';
 import { Leave } from '@/pages/hrms/Leave';
 import { LeaveApprovals } from '@/pages/hrms/LeaveApprovals';
-import { Payroll } from '@/pages/hrms/Payroll';
+import { PayrollDashboard } from '@/pages/hrms/PayrollDashboard';
+import { PayrunList } from '@/pages/hrms/PayrunList';
+import { PayrunDetail } from '@/pages/hrms/PayrunDetail';
+import { PayslipDetail } from '@/pages/hrms/PayslipDetail';
+import { SalaryManagement } from '@/pages/hrms/SalaryManagement';
+import { MyPayslips } from '@/pages/hrms/MyPayslips';
 import { Employees } from '@/pages/hrms/Employees';
 import { TimeTracker } from '@/pages/hrms/TimeTracker';
 import { Timeline } from '@/pages/hrms/Timeline';
@@ -119,9 +124,59 @@ function App() {
               element={
                 <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Payroll">
                   <HRMSLayout>
-                    <Payroll />
+                    <PayrollDashboard />
                   </HRMSLayout>
                 </RoleProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/payroll/payruns"
+              element={
+                <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Payroll">
+                  <HRMSLayout>
+                    <PayrunList />
+                  </HRMSLayout>
+                </RoleProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/payroll/payruns/:id"
+              element={
+                <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Payroll">
+                  <HRMSLayout>
+                    <PayrunDetail />
+                  </HRMSLayout>
+                </RoleProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/payroll/payslips/:id"
+              element={
+                <ProtectedRoute>
+                  <HRMSLayout>
+                    <PayslipDetail />
+                  </HRMSLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/salary"
+              element={
+                <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']}>
+                  <HRMSLayout>
+                    <SalaryManagement />
+                  </HRMSLayout>
+                </RoleProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/my/payslips"
+              element={
+                <ProtectedRoute>
+                  <HRMSLayout>
+                    <MyPayslips />
+                  </HRMSLayout>
+                </ProtectedRoute>
               }
             />
             <Route

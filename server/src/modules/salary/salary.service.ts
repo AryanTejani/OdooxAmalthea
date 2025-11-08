@@ -128,16 +128,24 @@ export function calculateSalaryComponents(
 }
 
 /**
- * Get salary configuration for an employee
+ * Get salary configuration for an employee (filtered by company_id for safety)
  */
-export async function getSalaryConfiguration(employeeId: string): Promise<SalaryConfiguration | null> {
-  const result = await query(
-    `SELECT 
-       id, employee_id, basic, allowances, wage, wage_type, component_config, pf_rate, professional_tax
-     FROM salary_config
-     WHERE employee_id = $1`,
-    [employeeId]
-  );
+export async function getSalaryConfiguration(employeeId: string, companyId?: string): Promise<SalaryConfiguration | null> {
+  let queryStr = `
+    SELECT 
+       sc.id, sc.employee_id, sc.basic, sc.allowances, sc.wage, sc.wage_type, sc.component_config, sc.pf_rate, sc.professional_tax
+     FROM salary_config sc
+     WHERE sc.employee_id = $1`;
+  
+  const params: any[] = [employeeId];
+  
+  // If companyId is provided, join with employees to filter by company_id
+  if (companyId) {
+    queryStr += ` AND sc.company_id = $2`;
+    params.push(companyId);
+  }
+  
+  const result = await query(queryStr, params);
 
   if (result.rows.length === 0) {
     return null;
@@ -148,11 +156,62 @@ export async function getSalaryConfiguration(employeeId: string): Promise<Salary
   const componentConfig = (row.component_config as Record<string, SalaryComponentConfig>) || {};
   const pfRate = parseFloat(row.pf_rate || '12.0');
   const professionalTax = parseFloat(row.professional_tax || '200.0');
-
-  const calculated = calculateSalaryComponents(wage, componentConfig, pfRate, professionalTax);
+  
+  // If componentConfig is empty or null, use stored basic and allowances directly
+  const hasComponentConfig = componentConfig && Object.keys(componentConfig).length > 0;
+  
+  let calculated;
+  if (hasComponentConfig) {
+    // Use calculated values from componentConfig
+    calculated = calculateSalaryComponents(wage, componentConfig, pfRate, professionalTax);
+  } else {
+    // Use stored values from database (legacy format without componentConfig)
+    const basic = parseFloat(row.basic);
+    const storedAllowances = (row.allowances as Record<string, number>) || {};
+    
+    // Normalize allowance keys to camelCase (e.g., HRA -> hra, StandardAllowance -> standardAllowance)
+    const normalizedAllowances: Record<string, number> = {};
+    for (const [key, value] of Object.entries(storedAllowances)) {
+      const lowerKey = key.toLowerCase();
+      let normalizedKey: string;
+      if (lowerKey === 'hra') {
+        normalizedKey = 'hra';
+      } else if (lowerKey === 'lta') {
+        normalizedKey = 'lta';
+      } else if (lowerKey.includes('standard') || lowerKey.includes('standardallowance')) {
+        normalizedKey = 'standardAllowance';
+      } else if (lowerKey.includes('performance') || lowerKey.includes('performancebonus')) {
+        normalizedKey = 'performanceBonus';
+      } else if (lowerKey.includes('fixed') || lowerKey.includes('fixedallowance')) {
+        normalizedKey = 'fixedAllowance';
+      } else {
+        // Generic camelCase conversion
+        normalizedKey = key.charAt(0).toLowerCase() + key.slice(1);
+      }
+      normalizedAllowances[normalizedKey] = parseFloat(String(value));
+    }
+    
+    // Calculate monthly wage: use stored wage if available, otherwise sum of basic + allowances
+    const allowancesTotal = Object.values(normalizedAllowances).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0);
+    const monthlyWage = (wage && wage > 0) ? wage : (basic + allowancesTotal);
+    const yearlyWage = monthlyWage * 12;
+    const pfEmployee = (basic * pfRate) / 100;
+    const pfEmployer = (basic * pfRate) / 100;
+    const netSalary = Math.max(0, monthlyWage - pfEmployee - professionalTax); // Ensure net salary is not negative
+    
+    calculated = {
+      basic,
+      allowances: normalizedAllowances,
+      monthlyWage,
+      yearlyWage,
+      pfEmployee,
+      pfEmployer,
+      netSalary,
+    };
+  }
 
   return {
-    wage,
+    wage: calculated.monthlyWage,
     wageType: (row.wage_type || 'FIXED') as 'FIXED',
     componentConfig,
     pfRate,

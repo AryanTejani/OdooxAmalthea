@@ -8,12 +8,11 @@ import {
   Calendar,
   FileText,
   DollarSign,
+  IndianRupee,
   User,
   LogOut,
   Clock,
   Timer,
-  FolderKanban,
-  ListTodo,
   Key,
   Settings,
   Building2,
@@ -63,18 +62,6 @@ const navItems: NavItem[] = [
     icon: Calendar,
   },
   {
-    title: 'Projects',
-    href: '/hrms/projects',
-    icon: FolderKanban,
-    roles: ['admin', 'hr'],
-  },
-  {
-    title: 'Tasks',
-    href: '/hrms/tasks',
-    icon: ListTodo,
-    roles: ['admin', 'hr'],
-  },
-  {
     title: 'Time Logs',
     href: '/hrms/time-logs',
     icon: Timer,
@@ -94,6 +81,18 @@ const navItems: NavItem[] = [
     icon: DollarSign,
     roles: ['admin', 'payroll'],
     badge: 'Payroll',
+  },
+  {
+    title: 'Salary',
+    href: '/hrms/salary',
+    icon: IndianRupee,
+    roles: ['admin', 'hr', 'payroll'],
+    badge: 'HR/Payroll',
+  },
+  {
+    title: 'My Payslips',
+    href: '/hrms/my/payslips',
+    icon: FileText,
   },
   {
     title: 'Employees',
@@ -143,7 +142,7 @@ export function Sidebar() {
 
   return (
     <div className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-gradient-to-b from-violet-50 to-white border-r border-violet-100">
-      <div className="flex flex-col flex-grow pt-6 pb-4 overflow-y-auto">
+      <div className="flex flex-col flex-grow pt-6 pb-4 overflow-y-auto scrollbar-none">
         {/* Logo/Brand */}
         <div className="flex items-center flex-shrink-0 px-6 mb-8">
           <div className="flex items-center space-x-3">

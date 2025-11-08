@@ -50,18 +50,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Silent refresh every 10 minutes
+  // Silent refresh every 10 minutes (only if user is logged in)
   useEffect(() => {
+    if (!user) {
+      return; // Don't set up refresh if user is not logged in
+    }
+
     const refreshInterval = setInterval(
       async () => {
-        if (user) {
-          try {
-            await authApi.refresh();
-            // Optionally refresh user data
-            await refreshUser();
-          } catch (err) {
+        try {
+          await authApi.refresh();
+          // Optionally refresh user data
+          await refreshUser();
+        } catch (err: any) {
+          // If no refresh token or session expired, clear user state
+          if (err?.response?.status === 401) {
+            console.log('Session expired, clearing user state');
+            setUser(null);
+            setMustChangePassword(false);
+          } else {
             console.error('Silent refresh failed:', err);
-            // Don't log out immediately - let the next request handle it
+            // Don't log out immediately for other errors - let the next request handle it
           }
         }
       },

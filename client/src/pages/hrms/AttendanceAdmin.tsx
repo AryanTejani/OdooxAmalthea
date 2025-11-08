@@ -88,11 +88,13 @@ export function AttendanceAdmin() {
         event.row
       ) {
         // Check if the update is for the selected date
-        const eventDate = event.row.minute_start
-          ? new Date(event.row.minute_start).toISOString().split('T')[0]
-          : event.row.day
-          ? new Date(event.row.day).toISOString().split('T')[0]
-          : null;
+        let eventDate: string | null = null;
+        
+        if (event.row.minute_start && (typeof event.row.minute_start === 'string' || event.row.minute_start instanceof Date || typeof event.row.minute_start === 'number')) {
+          eventDate = new Date(event.row.minute_start).toISOString().split('T')[0];
+        } else if (event.row.day && (typeof event.row.day === 'string' || event.row.day instanceof Date || typeof event.row.day === 'number')) {
+          eventDate = new Date(event.row.day).toISOString().split('T')[0];
+        }
 
         if (eventDate === selectedDate) {
           // Refetch data for the selected date

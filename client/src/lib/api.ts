@@ -44,8 +44,16 @@ api.interceptors.response.use(
       error.response?.status === 401 &&
       originalRequest &&
       !originalRequest.url?.includes('/auth/refresh') &&
+      !originalRequest.url?.includes('/auth/me') && // Don't retry /auth/me on 401
       !(originalRequest as any)._retry
     ) {
+      // Check if it's a "no refresh token" error - don't try to refresh in this case
+      const errorCode = (error.response?.data as any)?.error?.code;
+      if (errorCode === 'NO_REFRESH_TOKEN' || errorCode === 'UNAUTHORIZED') {
+        // User is not logged in - don't try to refresh
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         // Wait for the refresh to complete
         return new Promise((resolve) => {
@@ -66,11 +74,18 @@ api.interceptors.response.use(
 
         // Retry the original request
         return api(originalRequest);
-      } catch (refreshError) {
+      } catch (refreshError: any) {
         isRefreshing = false;
         refreshSubscribers = [];
+        
+        // If refresh failed due to no token, don't retry
+        const refreshErrorCode = refreshError?.response?.data?.error?.code;
+        if (refreshErrorCode === 'NO_REFRESH_TOKEN') {
+          // User is not logged in - reject the original error
+          return Promise.reject(error);
+        }
+        
         // Refresh failed - user needs to login again
-        // Could redirect to login here if needed
         return Promise.reject(refreshError);
       }
     }
@@ -308,24 +323,83 @@ export interface LeaveRequest {
   };
 }
 
+export type PayrunStatus = 'draft' | 'computed' | 'validated' | 'cancelled' | 'done';
+
 export interface Payrun {
   id: string;
   month: string;
-  status: 'DRAFT' | 'FINALIZED';
-  generatedAt?: string;
+  periodMonth: string;
+  status: PayrunStatus;
+  employeesCount: number;
+  grossTotal: number;
+  netTotal: number;
+  createdBy: string;
   createdAt: string;
+  validatedBy: string | null;
+  validatedAt: string | null;
+  payslipsCount?: number;
 }
 
 export interface Payslip {
   id: string;
   payrunId: string;
   employeeId: string;
+  userId: string;
+  periodMonth: string;
+  components: Record<string, unknown>;
+  basic: number;
+  allowancesTotal: number;
+  monthlyWage: number;
+  payableDays: number;
+  totalWorkingDays: number;
+  attendanceDaysAmount: number;
+  paidLeaveDaysAmount: number;
   gross: number;
-  pf: number;
+  pfEmployee: number;
+  pfEmployer: number;
   professionalTax: number;
   net: number;
-  breakdown: Record<string, unknown>;
+  status: PayrunStatus;
   createdAt: string;
+  employee?: {
+    id: string;
+    code: string;
+    title: string | null;
+    userName: string;
+    userEmail: string;
+  };
+  payrun?: Payrun;
+}
+
+export interface PayrollWarnings {
+  employeesWithoutBankAccount: {
+    count: number;
+    employees: Array<{ id: string; name: string; code: string }>;
+  };
+  employeesWithoutManager: {
+    count: number;
+    employees: Array<{ id: string; name: string; code: string }>;
+  };
+}
+
+export interface SalaryConfig {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  employeeTitle: string | null;
+  employeeEmail: string;
+  basic: number;
+  allowances: Record<string, number>;
+  updatedAt: string;
+}
+
+export interface EmployeeWithoutSalary {
+  id: string;
+  code: string;
+  title: string | null;
+  name: string;
+  email: string;
 }
 
 export interface Activity {
@@ -556,23 +630,120 @@ export const hrmsApi = {
     return response.data.data;
   },
 
-  getPayruns: async (): Promise<Payrun[]> => {
-    const response = await api.get<{ data: Payrun[] }>('/api/payroll/payruns');
+  createPayrun: async (data: { month: string }): Promise<Payrun> => {
+    const response = await api.post<{ data: Payrun }>('/api/payroll/payruns', data);
     return response.data.data;
   },
 
-  finalizePayrun: async (payrunId: string): Promise<Payrun> => {
-    const response = await api.post<{ data: Payrun }>(`/api/payroll/${payrunId}/finalize`, {});
+  getPayruns: async (limit?: number, offset?: number): Promise<Payrun[]> => {
+    const params: any = {};
+    if (limit) params.limit = limit;
+    if (offset) params.offset = offset;
+    const response = await api.get<{ data: Payrun[] }>('/api/payroll/payruns', { params });
+    return response.data.data;
+  },
+
+  computePayrun: async (payrunId: string): Promise<{ payrun: Payrun; warnings: any[]; processedCount: number }> => {
+    const response = await api.post<{ data: Payrun; warnings: any[]; processedCount: number }>(
+      `/api/payroll/payruns/${payrunId}/compute`
+    );
+    return { payrun: response.data.data, warnings: response.data.warnings, processedCount: response.data.processedCount };
+  },
+
+  validatePayrun: async (payrunId: string): Promise<Payrun> => {
+    const response = await api.post<{ data: Payrun }>(`/api/payroll/payruns/${payrunId}/validate`);
+    return response.data.data;
+  },
+
+  cancelPayrun: async (payrunId: string): Promise<Payrun> => {
+    const response = await api.post<{ data: Payrun }>(`/api/payroll/payruns/${payrunId}/cancel`);
     return response.data.data;
   },
 
   getPayslipsByPayrunId: async (payrunId: string): Promise<Payslip[]> => {
-    const response = await api.get<{ data: Payslip[] }>(`/api/payroll/${payrunId}/payslips`);
+    const response = await api.get<{ data: Payslip[] }>(`/api/payroll/payruns/${payrunId}/payslips`);
     return response.data.data;
   },
 
-  getPayslipById: async (id: string): Promise<Payslip> => {
-    const response = await api.get<{ data: Payslip }>(`/api/payroll/payslip/${id}`);
+  getPayslipById: async (payslipId: string): Promise<Payslip> => {
+    const response = await api.get<{ data: Payslip }>(`/api/payroll/payslips/${payslipId}`);
+    return response.data.data;
+  },
+
+  recomputePayslip: async (payslipId: string): Promise<Payslip> => {
+    const response = await api.post<{ data: Payslip }>(`/api/payroll/payslips/${payslipId}/recompute`);
+    return response.data.data;
+  },
+
+  getMyPayslips: async (month?: string): Promise<Payslip[]> => {
+    const params: any = {};
+    if (month) params.month = month;
+    const response = await api.get<{ data: Payslip[] }>('/api/payroll/my', { params });
+    return response.data.data;
+  },
+
+  getPayrollWarnings: async (): Promise<PayrollWarnings> => {
+    const response = await api.get<{ data: PayrollWarnings }>('/api/payroll/warnings');
+    return response.data.data;
+  },
+
+  getMonthlyStats: async (months?: number): Promise<{
+    employerCost: Array<{ month: string; cost: number }>;
+    employeeCount: Array<{ month: string; count: number }>;
+  }> => {
+    const params: any = {};
+    if (months) params.months = months;
+    const response = await api.get<{
+      data: {
+        employerCost: Array<{ month: string; cost: number }>;
+        employeeCount: Array<{ month: string; count: number }>;
+      };
+    }>('/api/payroll/stats', { params });
+    return response.data.data;
+  },
+
+  // Salary Management
+  getSalaryConfigs: async (): Promise<SalaryConfig[]> => {
+    const response = await api.get<{ data: SalaryConfig[] }>('/api/salary');
+    return response.data.data;
+  },
+
+  getEmployeesWithoutSalary: async (): Promise<EmployeeWithoutSalary[]> => {
+    const response = await api.get<{ data: EmployeeWithoutSalary[] }>('/api/salary/employees-without-config');
+    return response.data.data;
+  },
+
+  createSalaryConfig: async (data: {
+    employeeId: string;
+    basic: number;
+    allowances?: Record<string, number>;
+  }): Promise<SalaryConfig> => {
+    const response = await api.post<{ data: SalaryConfig }>('/api/salary', data);
+    return response.data.data;
+  },
+
+  updateSalaryConfig: async (
+    employeeId: string,
+    data: {
+      basic: number;
+      allowances?: Record<string, number>;
+    }
+  ): Promise<SalaryConfig> => {
+    const response = await api.put<{ data: SalaryConfig }>(`/api/salary/${employeeId}`, data);
+    return response.data.data;
+  },
+
+  deleteSalaryConfig: async (employeeId: string): Promise<void> => {
+    await api.delete(`/api/salary/${employeeId}`);
+  },
+
+  // Dashboard
+  getDashboardStats: async (): Promise<{
+    role: string;
+    kpis: any;
+    charts: any;
+  }> => {
+    const response = await api.get<{ data: any }>('/api/dashboard/stats');
     return response.data.data;
   },
 
@@ -583,76 +754,6 @@ export const hrmsApi = {
     if (entity) params.entity = entity;
     const response = await api.get<{ data: Activity[] }>('/api/activity/latest', { params });
     return response.data.data;
-  },
-
-  // Time Tracking - Projects
-  getProjects: async (): Promise<any[]> => {
-    const response = await api.get<{ data: any[] }>('/api/time-tracking/projects');
-    return response.data.data;
-  },
-
-  getProjectById: async (id: string): Promise<any> => {
-    const response = await api.get<{ data: any }>(`/api/time-tracking/projects/${id}`);
-    return response.data.data;
-  },
-
-  createProject: async (data: { name: string; description?: string; status?: string }): Promise<any> => {
-    const response = await api.post<{ data: any }>('/api/time-tracking/projects', data);
-    return response.data.data;
-  },
-
-  updateProject: async (id: string, data: { name?: string; description?: string; status?: string }): Promise<any> => {
-    const response = await api.put<{ data: any }>(`/api/time-tracking/projects/${id}`, data);
-    return response.data.data;
-  },
-
-  deleteProject: async (id: string): Promise<void> => {
-    await api.delete(`/api/time-tracking/projects/${id}`);
-  },
-
-  // Time Tracking - Tasks
-  getTasksByProject: async (projectId: string): Promise<any[]> => {
-    const response = await api.get<{ data: any[] }>(`/api/time-tracking/projects/${projectId}/tasks`);
-    return response.data.data;
-  },
-
-  getMyTasks: async (): Promise<any[]> => {
-    const response = await api.get<{ data: any[] }>('/api/time-tracking/tasks/me');
-    return response.data.data;
-  },
-
-  getTaskById: async (id: string): Promise<any> => {
-    const response = await api.get<{ data: any }>(`/api/time-tracking/tasks/${id}`);
-    return response.data.data;
-  },
-
-  createTask: async (data: {
-    projectId: string;
-    employeeId?: string;
-    title: string;
-    description?: string;
-    status?: string;
-    priority?: string;
-    dueDate?: string;
-  }): Promise<any> => {
-    const response = await api.post<{ data: any }>('/api/time-tracking/tasks', data);
-    return response.data.data;
-  },
-
-  updateTask: async (id: string, data: {
-    title?: string;
-    description?: string;
-    status?: string;
-    priority?: string;
-    dueDate?: string | null;
-    employeeId?: string | null;
-  }): Promise<any> => {
-    const response = await api.put<{ data: any }>(`/api/time-tracking/tasks/${id}`, data);
-    return response.data.data;
-  },
-
-  deleteTask: async (id: string): Promise<void> => {
-    await api.delete(`/api/time-tracking/tasks/${id}`);
   },
 
   // Time Tracking - Time Logs
@@ -679,8 +780,7 @@ export const hrmsApi = {
   },
 
   startTimer: async (data: {
-    taskId?: string;
-    projectId?: string;
+    taskName?: string;
     description?: string;
     billable?: boolean;
   }): Promise<any> => {
@@ -768,7 +868,7 @@ export const hrmsApi = {
     pfEmployer: number;
     netSalary: number;
   }> => {
-    const response = await api.get<{ data: any }>(`/api/employees/${employeeId}/configuration`);
+    const response = await api.get<{ data: any }>(`/api/salary/${employeeId}`);
     return response.data.data;
   },
 

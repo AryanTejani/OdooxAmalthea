@@ -10,21 +10,6 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireTenant);
 
-// Projects
-router.get('/projects', timeTrackingController.getAllProjectsController);
-router.get('/projects/:id', timeTrackingController.getProjectByIdController);
-router.post('/projects', requireHROfficer, timeTrackingController.createProjectController);
-router.put('/projects/:id', requireHROfficer, timeTrackingController.updateProjectController);
-router.delete('/projects/:id', requireHROfficer, timeTrackingController.deleteProjectController);
-
-// Tasks
-router.get('/projects/:projectId/tasks', timeTrackingController.getTasksByProjectController);
-router.get('/tasks/me', timeTrackingController.getTasksByEmployeeController); // Get my tasks
-router.get('/tasks/:id', timeTrackingController.getTaskByIdController);
-router.post('/tasks', requireHROfficer, timeTrackingController.createTaskController);
-router.put('/tasks/:id', requireHROfficer, timeTrackingController.updateTaskController);
-router.delete('/tasks/:id', requireHROfficer, timeTrackingController.deleteTaskController);
-
 // Time Logs
 router.get('/time-logs', timeTrackingController.getTimeLogsController); // Employees see their own, HR sees all
 router.get('/time-logs/active', timeTrackingController.getActiveTimerController); // Get active timer

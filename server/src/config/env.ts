@@ -18,7 +18,7 @@ const envSchema = z.object({
   // Attendance configuration
   WORK_HOURS_PER_DAY: z.string().transform(Number).pipe(z.number().positive()).default('8'),
   IDLE_BREAK_THRESHOLD_MIN: z.string().transform(Number).pipe(z.number().positive()).default('15'),
-  MIN_ACTIVE_HOURS_PRESENT: z.string().transform(Number).pipe(z.number().nonnegative()).default('4'),
+  MIN_ACTIVE_HOURS_PRESENT: z.string().transform(Number).pipe(z.number().nonnegative()).default('5'),
   WORK_WEEK_MON_TO_FRI: z.string().transform((val) => val === 'true').default('true'),
   // Cloudinary configuration
   CLOUDINARY_CLOUD_NAME: z.string().min(1),

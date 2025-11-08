@@ -210,8 +210,18 @@ export function Employees() {
     },
   });
 
-  const onSubmit = (data: CreateEmployeeForm) => {
-    createMutation.mutate(data);
+  const onSubmit = (data: any) => {
+    // Construct salary config with allowances
+    const formData: CreateEmployeeForm = {
+      ...data,
+      salaryConfig: data.salaryConfig?.basic ? {
+        basic: data.salaryConfig.basic,
+        allowances: {
+          ...(data.salaryConfig.allowances?.HRA ? { HRA: data.salaryConfig.allowances.HRA } : {}),
+        },
+      } : undefined,
+    };
+    createMutation.mutate(formData);
   };
 
   // Only HR Officer and Admin can create users
@@ -419,6 +429,40 @@ export function Employees() {
               {errors.joinDate && (
                 <p className="text-sm text-destructive">{errors.joinDate.message}</p>
               )}
+            </div>
+
+            <div className="col-span-2 border-t pt-4 mt-4">
+              <h3 className="text-sm font-semibold mb-3">Salary Configuration (for Payroll)</h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                Required for payroll processing. Leave blank to configure later.
+              </p>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="salaryConfig.basic">Basic Salary (₹)</Label>
+                  <Input
+                    id="salaryConfig.basic"
+                    type="number"
+                    {...register('salaryConfig.basic', { valueAsNumber: true })}
+                    disabled={createMutation.isPending}
+                    placeholder="e.g., 25000"
+                  />
+                  {errors.salaryConfig?.basic && (
+                    <p className="text-sm text-destructive">{errors.salaryConfig.basic.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="salaryConfig.allowances">HRA Allowance (₹)</Label>
+                  <Input
+                    id="salaryConfig.allowances.HRA"
+                    type="number"
+                    {...register('salaryConfig.allowances.HRA', { valueAsNumber: true })}
+                    disabled={createMutation.isPending}
+                    placeholder="e.g., 10000"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">

@@ -64,7 +64,7 @@ export interface PayslipBreakdown {
 export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LEAVE' | 'HALF_DAY';
 export type LeaveType = 'CASUAL' | 'SICK' | 'UNPAID';
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-export type PayrunStatus = 'DRAFT' | 'FINALIZED';
+export type PayrunStatus = 'draft' | 'computed' | 'validated' | 'cancelled' | 'done';
 
 export interface OrgUnit {
   id: string;
@@ -121,21 +121,51 @@ export interface LeaveRequest {
 
 export interface Payrun {
   id: string;
-  month: string;
+  month: string; // Legacy field, use period_month
+  periodMonth: Date;
   status: PayrunStatus;
-  generatedAt: Date | null;
+  employeesCount: number;
+  grossTotal: number;
+  netTotal: number;
+  createdBy: string;
+  createdAt: Date;
+  validatedBy: string | null;
+  validatedAt: Date | null;
 }
 
 export interface Payslip {
   id: string;
   payrunId: string;
   employeeId: string;
+  userId: string;
+  periodMonth: Date;
+  components: Record<string, unknown>; // JSONB breakdown
+  basic: number;
+  allowancesTotal: number;
+  monthlyWage: number;
+  payableDays: number;
+  totalWorkingDays: number;
+  attendanceDaysAmount: number;
+  paidLeaveDaysAmount: number;
   gross: number;
-  pf: number;
+  pfEmployee: number;
+  pfEmployer: number;
   professionalTax: number;
   net: number;
-  breakdown: PayslipBreakdown;
+  status: PayrunStatus;
   createdAt: Date;
+}
+
+// Payroll warnings
+export interface PayrollWarnings {
+  employeesWithoutBankAccount: {
+    count: number;
+    employees: Array<{ id: string; name: string; code: string }>;
+  };
+  employeesWithoutManager: {
+    count: number;
+    employees: Array<{ id: string; name: string; code: string }>;
+  };
 }
 
 export interface Activity {

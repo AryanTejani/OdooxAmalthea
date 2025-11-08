@@ -2,10 +2,6 @@ import { Request, Response } from 'express';
 import { timeTrackingService } from './time-tracking.service';
 import { orgService } from '../org/org.service';
 import {
-  createProjectSchema,
-  updateProjectSchema,
-  createTaskSchema,
-  updateTaskSchema,
   createTimeLogSchema,
   updateTimeLogSchema,
   timeLogQuerySchema,
@@ -15,437 +11,6 @@ import { logger } from '../../config/logger';
 import { AppError } from '../../middleware/errors';
 import { z } from 'zod';
 import { query } from '../../libs/db';
-
-// ============= PROJECTS =============
-
-export async function getAllProjectsController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const projects = await timeTrackingService.getAllProjects(req.companyId);
-    res.json({ data: projects });
-  } catch (error) {
-    logger.error({ error }, 'Failed to get projects');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch projects',
-      },
-    });
-  }
-}
-
-export async function getProjectByIdController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const { id } = req.params;
-    const project = await timeTrackingService.getProjectById(id, req.companyId);
-    
-    if (!project) {
-      res.status(404).json({
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Project not found',
-        },
-      });
-      return;
-    }
-    
-    res.json({ data: project });
-  } catch (error) {
-    logger.error({ error }, 'Failed to get project');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch project',
-      },
-    });
-  }
-}
-
-export async function createProjectController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const input = createProjectSchema.parse(req.body);
-    const userId = req.user!.userId;
-    
-    const project = await timeTrackingService.createProject({
-      ...input,
-      createdBy: userId,
-      companyId: req.companyId,
-    });
-    
-    res.status(201).json({ data: project });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid input',
-          details: error.errors,
-        },
-      });
-      return;
-    }
-    
-    logger.error({ error }, 'Failed to create project');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to create project',
-      },
-    });
-  }
-}
-
-export async function updateProjectController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const { id } = req.params;
-    const input = updateProjectSchema.parse(req.body);
-    
-    const project = await timeTrackingService.updateProject(id, req.companyId, input);
-    
-    if (!project) {
-      res.status(404).json({
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Project not found',
-        },
-      });
-      return;
-    }
-    
-    res.json({ data: project });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid input',
-          details: error.errors,
-        },
-      });
-      return;
-    }
-    
-    logger.error({ error }, 'Failed to update project');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to update project',
-      },
-    });
-  }
-}
-
-export async function deleteProjectController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const { id } = req.params;
-    const deleted = await timeTrackingService.deleteProject(id, req.companyId);
-    
-    if (!deleted) {
-      res.status(404).json({
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Project not found',
-        },
-      });
-      return;
-    }
-    
-    res.json({ message: 'Project deleted successfully' });
-  } catch (error) {
-    logger.error({ error }, 'Failed to delete project');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to delete project',
-      },
-    });
-  }
-}
-
-// ============= TASKS =============
-
-export async function getTasksByProjectController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const { projectId } = req.params;
-    const tasks = await timeTrackingService.getTasksByProject(projectId, req.companyId);
-    res.json({ data: tasks });
-  } catch (error) {
-    logger.error({ error }, 'Failed to get tasks');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch tasks',
-      },
-    });
-  }
-}
-
-export async function getTasksByEmployeeController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const userId = req.user!.userId;
-    const userRole = req.user!.role;
-    
-    // Ensure employee record exists (auto-create for HR/Payroll/Admin)
-    const employee = await ensureEmployeeRecord(userId, userRole, req.companyId);
-    
-    if (!employee) {
-      res.status(404).json({
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Employee record not found. Please contact admin to create an employee record for you.',
-        },
-      });
-      return;
-    }
-    
-    const tasks = await timeTrackingService.getTasksByEmployee(employee.id, req.companyId);
-    res.json({ data: tasks });
-  } catch (error) {
-    logger.error({ error }, 'Failed to get tasks');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch tasks',
-      },
-    });
-  }
-}
-
-export async function getTaskByIdController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const { id } = req.params;
-    const task = await timeTrackingService.getTaskById(id, req.companyId);
-    
-    if (!task) {
-      res.status(404).json({
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Task not found',
-        },
-      });
-      return;
-    }
-    
-    res.json({ data: task });
-  } catch (error) {
-    logger.error({ error }, 'Failed to get task');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch task',
-      },
-    });
-  }
-}
-
-export async function createTaskController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const input = createTaskSchema.parse(req.body);
-    const userId = req.user!.userId;
-    
-    const dueDate = input.dueDate ? new Date(input.dueDate) : undefined;
-    
-    const task = await timeTrackingService.createTask({
-      ...input,
-      dueDate,
-      createdBy: userId,
-      companyId: req.companyId,
-    });
-    
-    res.status(201).json({ data: task });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid input',
-          details: error.errors,
-        },
-      });
-      return;
-    }
-    
-    logger.error({ error }, 'Failed to create task');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to create task',
-      },
-    });
-  }
-}
-
-export async function updateTaskController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const { id } = req.params;
-    const input = updateTaskSchema.parse(req.body);
-    
-    const dueDate = input.dueDate !== undefined 
-      ? (input.dueDate ? new Date(input.dueDate) : null)
-      : undefined;
-    
-    const task = await timeTrackingService.updateTask(id, req.companyId, {
-      ...input,
-      dueDate,
-    });
-    
-    if (!task) {
-      res.status(404).json({
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Task not found',
-        },
-      });
-      return;
-    }
-    
-    res.json({ data: task });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid input',
-          details: error.errors,
-        },
-      });
-      return;
-    }
-    
-    logger.error({ error }, 'Failed to update task');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to update task',
-      },
-    });
-  }
-}
-
-export async function deleteTaskController(req: Request, res: Response): Promise<void> {
-  try {
-    if (!req.companyId) {
-      res.status(403).json({
-        error: {
-          code: 'NO_COMPANY',
-          message: 'User is not associated with a company',
-        },
-      });
-      return;
-    }
-    const { id } = req.params;
-    const deleted = await timeTrackingService.deleteTask(id, req.companyId);
-    
-    if (!deleted) {
-      res.status(404).json({
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Task not found',
-        },
-      });
-      return;
-    }
-    
-    res.json({ message: 'Task deleted successfully' });
-  } catch (error) {
-    logger.error({ error }, 'Failed to delete task');
-    res.status(500).json({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to delete task',
-      },
-    });
-  }
-}
 
 // ============= TIME LOGS =============
 
@@ -467,43 +32,24 @@ async function ensureEmployeeRecord(userId: string, userRole: string, companyId:
     }
     
     const user = userResult.rows[0];
-    const userName = user.name || 'User';
-    const userLoginId = user.login_id;
     
-    // Auto-create employee record for HR/Payroll/Admin users
-    // Get HR org unit if exists (filtered by company), otherwise use null
-    const hrOrgUnit = await query(
-      "SELECT id FROM org_units WHERE name = 'HR' AND company_id = $1 LIMIT 1",
-      [companyId]
-    );
+    // Generate employee code from login_id or name
+    const employeeCode = user.login_id || `EMP${Date.now()}`;
     
-    const orgUnitId = hrOrgUnit.rows.length > 0 ? hrOrgUnit.rows[0].id : null;
-    const code = userLoginId || `AUTO-${userId.substring(0, 8)}`;
-    const joinDate = new Date();
-    
-    // Determine title based on role
-    let title = 'Employee';
-    if (userRole === 'hr') title = 'HR Officer';
-    else if (userRole === 'payroll') title = 'Payroll Officer';
-    else if (userRole === 'admin') title = 'Admin';
-    
-    // Create employee record with company_id
-    const employeeResult = await query(
-      `INSERT INTO employees (user_id, org_unit_id, code, title, join_date, company_id) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
-       RETURNING id, user_id, org_unit_id, code, title, join_date, company_id, created_at, updated_at`,
-      [userId, orgUnitId, code, title, joinDate, companyId]
+    // Create employee record
+    const empResult = await query(
+      `INSERT INTO employees (user_id, company_id, code, title, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, now(), now())
+       RETURNING id, user_id, company_id, code, title, created_at, updated_at`,
+      [userId, companyId, employeeCode, null]
     );
     
     employee = {
-      id: employeeResult.rows[0].id,
-      userId: employeeResult.rows[0].user_id,
-      orgUnitId: employeeResult.rows[0].org_unit_id,
-      code: employeeResult.rows[0].code,
-      title: employeeResult.rows[0].title,
-      joinDate: employeeResult.rows[0].join_date,
-      createdAt: employeeResult.rows[0].created_at,
-      updatedAt: employeeResult.rows[0].updated_at,
+      id: empResult.rows[0].id,
+      userId: empResult.rows[0].user_id,
+      companyId: empResult.rows[0].company_id,
+      code: empResult.rows[0].code,
+      title: empResult.rows[0].title,
     };
   }
   
@@ -759,8 +305,7 @@ export async function startTimerController(req: Request, res: Response): Promise
     
     const timeLog = await timeTrackingService.startTimer({
       employeeId: employee.id,
-      taskId: input.taskId || undefined,
-      projectId: input.projectId || undefined,
+      taskName: input.taskName || undefined,
       description: input.description || undefined,
       billable: input.billable !== undefined ? input.billable : true,
       userId,
@@ -1031,8 +576,7 @@ export async function updateTimeLogController(req: Request, res: Response): Prom
     }
     
     const timeLog = await timeTrackingService.updateTimeLog(id, req.companyId, {
-      taskId: input.taskId,
-      projectId: input.projectId,
+      taskName: input.taskName,
       description: input.description,
       startTime: input.startTime ? new Date(input.startTime) : undefined,
       endTime: input.endTime ? new Date(input.endTime) : undefined,

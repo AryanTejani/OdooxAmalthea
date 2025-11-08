@@ -6,13 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Play, Square, Timer as TimerIcon } from 'lucide-react';
 import { useWS } from '@/hooks/useWS';
 
@@ -52,8 +46,7 @@ function useElapsedTime(startTime: string | null | undefined, isActive: boolean)
 
 export function TimeTracker() {
   const queryClient = useQueryClient();
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
-  const [selectedTaskId, setSelectedTaskId] = useState<string>('');
+  const [taskName, setTaskName] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [billable, setBillable] = useState<boolean>(true);
 
@@ -62,25 +55,6 @@ export function TimeTracker() {
     queryKey: ['time-logs', 'active'],
     queryFn: () => hrmsApi.getActiveTimer(),
     refetchInterval: 5000, // Refetch every 5 seconds
-  });
-
-  // Get projects
-  const { data: projects } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => hrmsApi.getProjects(),
-  });
-
-  // Get tasks for selected project
-  const { data: tasks } = useQuery({
-    queryKey: ['tasks', selectedProjectId],
-    queryFn: () => hrmsApi.getTasksByProject(selectedProjectId),
-    enabled: !!selectedProjectId,
-  });
-
-  // Get my tasks
-  const { data: myTasks } = useQuery({
-    queryKey: ['tasks', 'me'],
-    queryFn: () => hrmsApi.getMyTasks(),
   });
 
   // Calculate if timer is running (needed before useEffect)
@@ -136,8 +110,7 @@ export function TimeTracker() {
 
   const startTimerMutation = useMutation({
     mutationFn: () => hrmsApi.startTimer({
-      taskId: selectedTaskId || undefined,
-      projectId: selectedProjectId || undefined,
+      taskName: taskName || undefined,
       description: description || undefined,
       billable,
     }),
@@ -147,6 +120,7 @@ export function TimeTracker() {
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
       refetchActiveTimer();
       toast.success('Timer started! Attendance automatically recorded.');
+      setTaskName('');
       setDescription('');
     },
     onError: (error) => {
@@ -162,8 +136,7 @@ export function TimeTracker() {
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
       refetchActiveTimer();
       toast.success('Timer stopped! Attendance automatically updated.');
-      setSelectedProjectId('');
-      setSelectedTaskId('');
+      setTaskName('');
       setDescription('');
     },
     onError: (error) => {
@@ -176,17 +149,13 @@ export function TimeTracker() {
     isTimerRunning
   );
 
-  // Filter tasks to show only my tasks or all tasks from selected project
-  const availableTasks = selectedProjectId 
-    ? (tasks || [])
-    : (myTasks || []);
 
   return (
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold">Time Tracker</h1>
         <p className="text-muted-foreground mt-1">
-          Track time spent on projects and tasks. All time is automatically logged to your timeline.
+          Track your work time. All time is automatically logged to your timeline.
         </p>
       </div>
 
@@ -206,19 +175,14 @@ export function TimeTracker() {
                   <div className="text-4xl font-bold text-violet-600 font-mono mb-2">
                     {elapsedTime}
                   </div>
+                  {activeTimer.taskName && (
+                    <p className="text-sm font-medium text-violet-700 mb-1">
+                      {activeTimer.taskName}
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground">
                     {activeTimer.description || 'No description'}
                   </p>
-                  {activeTimer.project && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Project: {activeTimer.project.name}
-                    </p>
-                  )}
-                  {activeTimer.task && (
-                    <p className="text-xs text-muted-foreground">
-                      Task: {activeTimer.task.title}
-                    </p>
-                  )}
                   <p className="text-xs text-green-600 mt-2 font-medium">
                     ✓ Time is being logged automatically
                   </p>
@@ -250,58 +214,25 @@ export function TimeTracker() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="project">Project (Optional)</Label>
-              <Select
-                value={selectedProjectId || undefined}
-                onValueChange={(value) => {
-                  setSelectedProjectId(value === 'none' ? '' : value);
-                  setSelectedTaskId(''); // Reset task when project changes
-                }}
+              <Label htmlFor="taskName">Task Name (Optional)</Label>
+              <Input
+                id="taskName"
+                placeholder="e.g., Development, Meeting, Documentation"
+                value={taskName}
+                onChange={(e) => setTaskName(e.target.value)}
                 disabled={isTimerRunning}
-              >
-                <SelectTrigger id="project">
-                  <SelectValue placeholder="Select project (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Project</SelectItem>
-                  {projects?.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="task">Task (Optional)</Label>
-              <Select
-                value={selectedTaskId || undefined}
-                onValueChange={(value) => setSelectedTaskId(value === 'none' ? '' : value)}
-                disabled={isTimerRunning || (!selectedProjectId && availableTasks.length === 0)}
-              >
-                <SelectTrigger id="task">
-                  <SelectValue placeholder="Select task (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Task</SelectItem>
-                  {availableTasks.map((task: any) => (
-                    <SelectItem key={task.id} value={task.id}>
-                      {task.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="description">Description (Optional)</Label>
-              <Input
+              <Textarea
                 id="description"
                 placeholder="What are you working on?"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={isTimerRunning}
+                rows={3}
               />
             </div>
 

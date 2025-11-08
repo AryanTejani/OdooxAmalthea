@@ -161,64 +161,48 @@ export const rejectLeaveSchema = z.object({
 });
 
 // Payroll
-export const generatePayrunSchema = z.object({
+// Payroll
+export const createPayrunSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/), // YYYY-MM format
 });
 
-// Projects
-export const createProjectSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().optional(),
-  status: z.enum(['ACTIVE', 'COMPLETED', 'ON_HOLD']).optional(),
+export const generatePayrunSchema = createPayrunSchema; // Alias for backward compatibility
+
+export const payrunIdParamSchema = z.object({
+  id: z.string().uuid(),
 });
 
-export const updateProjectSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().optional(),
-  status: z.enum(['ACTIVE', 'COMPLETED', 'ON_HOLD']).optional(),
+export const payslipIdParamSchema = z.object({
+  id: z.string().uuid(),
 });
 
-// Tasks
-export const createTaskSchema = z.object({
-  projectId: z.string().uuid(),
-  employeeId: z.string().uuid().optional(),
-  title: z.string().min(1).max(255),
-  description: z.string().optional(),
-  status: z.enum(['TODO', 'IN_PROGRESS', 'COMPLETED']).optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
-  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+export const getPayrunsQuerySchema = z.object({
+  limit: z.string().transform(Number).pipe(z.number().positive().max(100)).optional(),
+  offset: z.string().transform(Number).pipe(z.number().nonnegative()).optional(),
 });
 
-export const updateTaskSchema = z.object({
-  title: z.string().min(1).max(255).optional(),
-  description: z.string().optional(),
-  status: z.enum(['TODO', 'IN_PROGRESS', 'COMPLETED']).optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
-  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
-  employeeId: z.string().uuid().optional().nullable(),
+export const getMyPayslipsQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(), // YYYY-MM format
 });
 
 // Time Logs
 export const createTimeLogSchema = z.object({
-  taskId: z.string().uuid().optional().nullable(),
-  projectId: z.string().uuid().optional().nullable(),
+  taskName: z.string().optional(),
   description: z.string().optional(),
   startTime: z.string().datetime(),
   endTime: z.string().datetime().optional().nullable(),
   billable: z.boolean().optional(),
 });
 
-// Schema for starting timer (allows starting without task/project)
+// Schema for starting timer (manual task name and description)
 export const startTimerSchema = z.object({
-  taskId: z.string().uuid().optional().nullable(),
-  projectId: z.string().uuid().optional().nullable(),
+  taskName: z.string().optional(),
   description: z.string().optional(),
   billable: z.boolean().optional(),
 });
 
 export const updateTimeLogSchema = z.object({
-  taskId: z.string().uuid().optional().nullable(),
-  projectId: z.string().uuid().optional().nullable(),
+  taskName: z.string().optional(),
   description: z.string().optional(),
   startTime: z.string().datetime().optional(),
   endTime: z.string().datetime().optional().nullable(),

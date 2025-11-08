@@ -5,15 +5,15 @@ import { logger } from '../../config/logger';
 
 export const timeTrackingService = {
   // Projects
-  async getAllProjects(companyId: string) {
-    return timeTrackingRepo.getAllProjects(companyId);
+  async getAllProjects(companyId: string, userId?: string) {
+    return timeTrackingRepo.getAllProjects(companyId, userId);
   },
 
   async getProjectById(id: string, companyId: string) {
     return timeTrackingRepo.getProjectById(id, companyId);
   },
 
-  async createProject(data: { name: string; description?: string; status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD'; createdBy?: string; companyId: string }) {
+  async createProject(data: { name: string; description?: string; status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD'; createdBy?: string; companyId: string; userIds?: string[] }) {
     const project = await timeTrackingRepo.createProject(data);
     
     await notifyChannel('realtime', {
@@ -29,7 +29,7 @@ export const timeTrackingService = {
     return project;
   },
 
-  async updateProject(id: string, companyId: string, data: { name?: string; description?: string; status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' }) {
+  async updateProject(id: string, companyId: string, data: { name?: string; description?: string; status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD'; userIds?: string[] }) {
     const project = await timeTrackingRepo.updateProject(id, companyId, data);
     
     if (project) {
@@ -62,12 +62,16 @@ export const timeTrackingService = {
   },
 
   // Tasks
-  async getTasksByProject(projectId: string, companyId: string) {
-    return timeTrackingRepo.getTasksByProject(projectId, companyId);
+  async getTasksByProject(projectId: string, companyId: string, userId?: string) {
+    return timeTrackingRepo.getTasksByProject(projectId, companyId, userId);
   },
 
   async getTasksByEmployee(employeeId: string, companyId: string) {
     return timeTrackingRepo.getTasksByEmployee(employeeId, companyId);
+  },
+
+  async getTasksByUser(userId: string, companyId: string) {
+    return timeTrackingRepo.getTasksByUser(userId, companyId);
   },
 
   async getTaskById(id: string, companyId: string) {
@@ -77,6 +81,7 @@ export const timeTrackingService = {
   async createTask(data: {
     projectId: string;
     employeeId?: string;
+    userIds?: string[];
     title: string;
     description?: string;
     status?: 'TODO' | 'IN_PROGRESS' | 'COMPLETED';
@@ -109,6 +114,7 @@ export const timeTrackingService = {
     priority?: 'LOW' | 'MEDIUM' | 'HIGH';
     dueDate?: Date | null;
     employeeId?: string | null;
+    userIds?: string[];
   }) {
     const task = await timeTrackingRepo.updateTask(id, companyId, data);
     
@@ -166,8 +172,7 @@ export const timeTrackingService = {
 
   async startTimer(data: {
     employeeId: string;
-    taskId?: string;
-    projectId?: string;
+    taskName?: string;
     description?: string;
     billable?: boolean;
     userId: string;
@@ -182,8 +187,7 @@ export const timeTrackingService = {
     const startTime = new Date();
     const timeLog = await timeTrackingRepo.createTimeLog({
       employeeId: data.employeeId,
-      taskId: data.taskId || null,
-      projectId: data.projectId || null,
+      taskName: data.taskName || null,
       description: data.description || null,
       startTime,
       endTime: null,
@@ -205,8 +209,7 @@ export const timeTrackingService = {
       row: {
         id: timeLog.id,
         employeeId: timeLog.employeeId,
-        taskId: timeLog.taskId,
-        projectId: timeLog.projectId,
+        taskName: timeLog.taskName,
         startTime: timeLog.startTime.toISOString(),
       },
     });
@@ -316,8 +319,7 @@ export const timeTrackingService = {
 
   async createTimeLog(data: {
     employeeId: string;
-    taskId?: string;
-    projectId?: string;
+    taskName?: string;
     description?: string;
     startTime: Date;
     endTime?: Date;
@@ -332,8 +334,7 @@ export const timeTrackingService = {
       row: {
         id: timeLog.id,
         employeeId: timeLog.employeeId,
-        taskId: timeLog.taskId,
-        projectId: timeLog.projectId,
+        taskName: timeLog.taskName,
         startTime: timeLog.startTime.toISOString(),
         endTime: timeLog.endTime?.toISOString(),
         duration: timeLog.duration,
@@ -344,8 +345,7 @@ export const timeTrackingService = {
   },
 
   async updateTimeLog(id: string, companyId: string, data: {
-    taskId?: string | null;
-    projectId?: string | null;
+    taskName?: string | null;
     description?: string | null;
     startTime?: Date;
     endTime?: Date | null;
@@ -360,8 +360,7 @@ export const timeTrackingService = {
         row: {
           id: timeLog.id,
           employeeId: timeLog.employeeId,
-          taskId: timeLog.taskId,
-          projectId: timeLog.projectId,
+          taskName: timeLog.taskName,
           startTime: timeLog.startTime.toISOString(),
           endTime: timeLog.endTime?.toISOString(),
           duration: timeLog.duration,
