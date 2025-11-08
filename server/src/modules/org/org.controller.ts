@@ -22,7 +22,7 @@ export async function getOrgUnitsController(req: Request, res: Response): Promis
 export async function createOrgUnitController(req: Request, res: Response): Promise<void> {
   try {
     const data = createOrgUnitSchema.parse(req.body);
-    const unit = await orgService.createOrgUnit(data, req.user!.userId);
+    const unit = await orgService.createOrgUnit(data);
     res.status(201).json({ data: unit });
   } catch (error) {
     if (error instanceof z.ZodError) {

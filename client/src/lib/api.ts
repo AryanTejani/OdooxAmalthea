@@ -324,16 +324,6 @@ export const hrmsApi = {
   },
 
   // Attendance
-  punchIn: async (data?: { inAt?: string }): Promise<Attendance> => {
-    const response = await api.post<{ data: Attendance }>('/api/attendance/punch-in', data);
-    return response.data.data;
-  },
-
-  punchOut: async (data?: { outAt?: string }): Promise<Attendance> => {
-    const response = await api.post<{ data: Attendance }>('/api/attendance/punch-out', data);
-    return response.data.data;
-  },
-
   getMyAttendance: async (month?: string): Promise<Attendance[]> => {
     const params = month ? { month } : {};
     const response = await api.get<{ data: Attendance[] }>('/api/attendance/me', { params });

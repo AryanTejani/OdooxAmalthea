@@ -11,7 +11,7 @@ export const orgService = {
     return orgRepo.getOrgUnits();
   },
 
-  async createOrgUnit(data: CreateOrgUnitInput, userId: string) {
+  async createOrgUnit(data: CreateOrgUnitInput) {
     // Verify parent exists if provided
     if (data.parentId) {
       const result = await query(

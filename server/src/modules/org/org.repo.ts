@@ -1,7 +1,7 @@
 import { query } from '../../libs/db';
 import { Employee, OrgUnit, SalaryConfig, CreateOrgUnitInput } from '../../domain/types';
 
-interface OrgUnitWithRelations extends OrgUnit {
+export interface OrgUnitWithRelations extends OrgUnit {
   parent?: OrgUnit | null;
   children?: OrgUnit[];
   _count?: {
@@ -15,7 +15,7 @@ interface OrgUnitWithEmployees extends OrgUnit {
   employees?: Employee[];
 }
 
-interface EmployeeWithRelations extends Employee {
+export interface EmployeeWithRelations extends Employee {
   orgUnit?: OrgUnit | null;
   salaryCfg?: SalaryConfig | null;
   userName?: string;
