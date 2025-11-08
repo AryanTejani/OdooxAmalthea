@@ -7,7 +7,7 @@ import { User, Session, SessionWithUser, UserWithoutPassword, CreateUserInput } 
  */
 export async function findUserByEmail(email: string): Promise<User | null> {
   const result = await query(
-    'SELECT id, email, name, password_hash, role, login_id, must_change_password, phone, created_at, updated_at FROM users WHERE email = $1',
+    'SELECT id, email, name, password_hash, role, login_id, must_change_password, phone, about, job_love, hobbies, skills, certifications, department, manager, location, company, created_at, updated_at FROM users WHERE email = $1',
     [email.toLowerCase()]
   );
   
@@ -25,6 +25,15 @@ export async function findUserByEmail(email: string): Promise<User | null> {
     loginId: row.login_id,
     mustChangePassword: row.must_change_password,
     phone: row.phone,
+    about: row.about,
+    jobLove: row.job_love,
+    hobbies: row.hobbies,
+    skills: row.skills || [],
+    certifications: row.certifications || [],
+    department: row.department,
+    manager: row.manager,
+    location: row.location,
+    company: row.company,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -35,7 +44,7 @@ export async function findUserByEmail(email: string): Promise<User | null> {
  */
 export async function findUserByLoginId(loginId: string): Promise<User | null> {
   const result = await query(
-    'SELECT id, email, name, password_hash, role, login_id, must_change_password, phone, created_at, updated_at FROM users WHERE login_id = $1',
+    'SELECT id, email, name, password_hash, role, login_id, must_change_password, phone, about, job_love, hobbies, skills, certifications, department, manager, location, company, created_at, updated_at FROM users WHERE login_id = $1',
     [loginId.toUpperCase()]
   );
   
@@ -53,6 +62,15 @@ export async function findUserByLoginId(loginId: string): Promise<User | null> {
     loginId: row.login_id,
     mustChangePassword: row.must_change_password,
     phone: row.phone,
+    about: row.about,
+    jobLove: row.job_love,
+    hobbies: row.hobbies,
+    skills: row.skills || [],
+    certifications: row.certifications || [],
+    department: row.department,
+    manager: row.manager,
+    location: row.location,
+    company: row.company,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -77,7 +95,7 @@ export async function findUserByEmailOrLoginId(login: string): Promise<User | nu
  */
 export async function findUserById(id: string): Promise<User | null> {
   const result = await query(
-    'SELECT id, email, name, password_hash, role, login_id, must_change_password, phone, created_at, updated_at FROM users WHERE id = $1',
+    'SELECT id, email, name, password_hash, role, login_id, must_change_password, phone, about, job_love, hobbies, skills, certifications, department, manager, location, company, created_at, updated_at FROM users WHERE id = $1',
     [id]
   );
   
@@ -95,6 +113,15 @@ export async function findUserById(id: string): Promise<User | null> {
     loginId: row.login_id,
     mustChangePassword: row.must_change_password,
     phone: row.phone,
+    about: row.about,
+    jobLove: row.job_love,
+    hobbies: row.hobbies,
+    skills: row.skills || [],
+    certifications: row.certifications || [],
+    department: row.department,
+    manager: row.manager,
+    location: row.location,
+    company: row.company,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -139,7 +166,7 @@ export async function createUser(data: CreateUserInput): Promise<User> {
  */
 export async function getUserWithoutPassword(id: string): Promise<UserWithoutPassword | null> {
   const result = await query(
-    'SELECT id, email, name, role, login_id, must_change_password, phone, created_at, updated_at FROM users WHERE id = $1',
+    'SELECT id, email, name, role, login_id, must_change_password, phone, about, job_love, hobbies, skills, certifications, department, manager, location, company, created_at, updated_at FROM users WHERE id = $1',
     [id]
   );
   
@@ -156,6 +183,15 @@ export async function getUserWithoutPassword(id: string): Promise<UserWithoutPas
     loginId: row.login_id,
     mustChangePassword: row.must_change_password,
     phone: row.phone,
+    about: row.about,
+    jobLove: row.job_love,
+    hobbies: row.hobbies,
+    skills: row.skills || [],
+    certifications: row.certifications || [],
+    department: row.department,
+    manager: row.manager,
+    location: row.location,
+    company: row.company,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -195,7 +231,7 @@ export async function findSessionWithUser(id: string): Promise<SessionWithUser |
   const result = await query(
     `SELECT 
        s.id, s.user_id, s.refresh_token_hash, s.user_agent, s.ip, s.expires_at, s.revoked_at, s.created_at,
-       u.id as user_id_full, u.email, u.name, u.password_hash, u.role, u.login_id, u.must_change_password, u.phone, u.created_at as user_created_at, u.updated_at as user_updated_at
+       u.id as user_id_full, u.email, u.name, u.password_hash, u.role, u.login_id, u.must_change_password, u.phone, u.about, u.job_love, u.hobbies, u.skills, u.certifications, u.department, u.manager, u.location, u.company, u.created_at as user_created_at, u.updated_at as user_updated_at
      FROM sessions s
      INNER JOIN users u ON s.user_id = u.id
      WHERE s.id = $1`,
@@ -225,6 +261,15 @@ export async function findSessionWithUser(id: string): Promise<SessionWithUser |
       loginId: row.login_id,
       mustChangePassword: row.must_change_password,
       phone: row.phone,
+      about: row.about,
+      jobLove: row.job_love,
+      hobbies: row.hobbies,
+      skills: row.skills || [],
+      certifications: row.certifications || [],
+      department: row.department,
+      manager: row.manager,
+      location: row.location,
+      company: row.company,
       createdAt: row.user_created_at,
       updatedAt: row.user_updated_at,
     },
@@ -367,5 +412,125 @@ export async function revokeAllUserSessions(userId: string): Promise<void> {
     'UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL',
     [userId]
   );
+}
+
+/**
+ * Update user profile
+ */
+export async function updateUserProfile(
+  userId: string,
+  data: {
+    phone?: string;
+    department?: string;
+    manager?: string;
+    location?: string;
+    company?: string;
+    about?: string;
+    jobLove?: string;
+    hobbies?: string;
+    skills?: string[];
+    certifications?: string[];
+  }
+): Promise<void> {
+  const updates: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  if (data.phone !== undefined) {
+    updates.push(`phone = $${paramIndex}`);
+    params.push(data.phone);
+    paramIndex++;
+  }
+  if (data.department !== undefined) {
+    updates.push(`department = $${paramIndex}`);
+    params.push(data.department);
+    paramIndex++;
+  }
+  if (data.manager !== undefined) {
+    updates.push(`manager = $${paramIndex}`);
+    params.push(data.manager);
+    paramIndex++;
+  }
+  if (data.location !== undefined) {
+    updates.push(`location = $${paramIndex}`);
+    params.push(data.location);
+    paramIndex++;
+  }
+  if (data.company !== undefined) {
+    updates.push(`company = $${paramIndex}`);
+    params.push(data.company);
+    paramIndex++;
+  }
+  if (data.about !== undefined) {
+    updates.push(`about = $${paramIndex}`);
+    params.push(data.about);
+    paramIndex++;
+  }
+  if (data.jobLove !== undefined) {
+    updates.push(`job_love = $${paramIndex}`);
+    params.push(data.jobLove);
+    paramIndex++;
+  }
+  if (data.hobbies !== undefined) {
+    updates.push(`hobbies = $${paramIndex}`);
+    params.push(data.hobbies);
+    paramIndex++;
+  }
+  if (data.skills !== undefined) {
+    updates.push(`skills = $${paramIndex}`);
+    params.push(data.skills);
+    paramIndex++;
+  }
+  if (data.certifications !== undefined) {
+    updates.push(`certifications = $${paramIndex}`);
+    params.push(data.certifications);
+    paramIndex++;
+  }
+
+  if (updates.length === 0) {
+    return; // No updates
+  }
+
+  updates.push(`updated_at = now()`);
+  params.push(userId);
+
+  await query(
+    `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+    params
+  );
+}
+
+/**
+ * Reset user password (admin only)
+ */
+export async function resetUserPassword(
+  loginId: string,
+  passwordHash: string
+): Promise<void> {
+  await query(
+    'UPDATE users SET password_hash = $1, must_change_password = true, updated_at = now() WHERE login_id = $2',
+    [passwordHash, loginId.toUpperCase()]
+  );
+}
+
+/**
+ * Find user by login_id (for password reset)
+ */
+export async function findUserByLoginIdForReset(loginId: string): Promise<{ id: string; email: string; loginId: string } | null> {
+  const result = await query(
+    'SELECT id, email, login_id FROM users WHERE login_id = $1',
+    [loginId.toUpperCase()]
+  );
+  
+  if (result.rows.length === 0) {
+    return null;
+  }
+  
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    email: row.email,
+    loginId: row.login_id,
+  };
 }
 

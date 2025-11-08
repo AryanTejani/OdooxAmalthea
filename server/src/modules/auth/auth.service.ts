@@ -1,10 +1,12 @@
 import { User, UserWithoutPassword } from '../user/user.types';
 import { hashPassword, verifyPassword, hashRefreshToken, generateSecureToken, verifyRefreshToken } from '../../utils/crypto';
 import { signAccessToken, signRefreshToken, verifyRefreshToken as verifyRefreshJWT } from '../../utils/jwt';
-import { findUserByEmail, findUserByEmailOrLoginId, findUserById, createUser, getUserWithoutPassword, findSessionWithUser, createSession as createSessionRepo, revokeSession as revokeSessionRepo, updateSessionRefreshTokenHash, updateUserPassword, revokeAllUserSessions } from './auth.repo';
+import { findUserByEmail, findUserByEmailOrLoginId, findUserById, createUser, getUserWithoutPassword, findSessionWithUser, createSession as createSessionRepo, revokeSession as revokeSessionRepo, updateSessionRefreshTokenHash, updateUserPassword, revokeAllUserSessions, updateUserProfile, resetUserPassword, findUserByLoginIdForReset } from './auth.repo';
 import { AppError } from '../../middleware/errors';
-import { RegisterInput, LoginInput, ChangePasswordInput } from './auth.schemas';
+import { RegisterInput, LoginInput, ChangePasswordInput, UpdateProfileInput } from './auth.schemas';
 import { logger } from '../../config/logger';
+import { getEmployeeByUserId } from '../org/org.repo';
+import { query } from '../../libs/db';
 
 export interface AuthResult {
   user: UserWithoutPassword;
@@ -119,8 +121,11 @@ export async function changePassword(
   // Hash new password
   const newPasswordHash = await hashPassword(input.newPassword);
 
-  // Update password and revoke all other sessions for security
-  await updateUserPassword(userId, newPasswordHash);
+  // Update password, set must_change_password=false, and revoke all other sessions for security
+  await query(
+    'UPDATE users SET password_hash = $1, must_change_password = false, updated_at = now() WHERE id = $2',
+    [newPasswordHash, userId]
+  );
   await revokeAllUserSessions(userId);
 
   logger.info({ userId: user.id }, 'Password changed');
@@ -268,14 +273,63 @@ export async function logout(sessionId: string): Promise<void> {
 }
 
 /**
- * Get current user
+ * Get current user with employee info
  */
-export async function getMe(userId: string): Promise<UserWithoutPassword> {
+export async function getMe(userId: string): Promise<UserWithoutPassword & { employee?: any }> {
   const user = await getUserWithoutPassword(userId);
   if (!user) {
     throw new AppError('USER_NOT_FOUND', 'User not found', 404);
   }
+
+  // Get employee info if exists
+  const employee = await getEmployeeByUserId(userId);
+
+  return {
+    ...user,
+    employee: employee || undefined,
+  };
+}
+
+/**
+ * Update user profile
+ */
+export async function updateProfile(
+  userId: string,
+  data: UpdateProfileInput
+): Promise<UserWithoutPassword> {
+  await updateUserProfile(userId, data);
+  
+  const user = await getUserWithoutPassword(userId);
+  if (!user) {
+    throw new AppError('USER_NOT_FOUND', 'User not found', 404);
+  }
+
+  logger.info({ userId }, 'Profile updated');
   return user;
+}
+
+/**
+ * Reset user password (admin only)
+ */
+export async function resetPassword(loginId: string): Promise<{ loginId: string; tempPassword: string }> {
+  const user = await findUserByLoginIdForReset(loginId);
+  if (!user) {
+    throw new AppError('USER_NOT_FOUND', 'User not found', 404);
+  }
+
+  // Generate temporary password (12 characters, alphanumeric)
+  const tempPassword = generateSecureToken(12);
+  const passwordHash = await hashPassword(tempPassword);
+
+  // Update password and set must_change_password=true
+  await resetUserPassword(loginId, passwordHash);
+
+  logger.info({ userId: user.id, loginId }, 'Password reset by admin');
+
+  return {
+    loginId: user.loginId,
+    tempPassword,
+  };
 }
 
 

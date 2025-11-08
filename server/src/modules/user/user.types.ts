@@ -7,6 +7,15 @@ export interface User {
   loginId: string | null;
   mustChangePassword: boolean;
   phone: string | null;
+  about: string | null;
+  jobLove: string | null;
+  hobbies: string | null;
+  skills: string[];
+  certifications: string[];
+  department: string | null;
+  manager: string | null;
+  location: string | null;
+  company: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

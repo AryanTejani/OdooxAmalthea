@@ -388,7 +388,7 @@ export async function getEmployeesByOrgUnit(orgUnitId: string): Promise<Employee
 export async function getAllEmployees(): Promise<EmployeeWithRelations[]> {
   const result = await query(
     `SELECT e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
-            u.name as user_name, u.email as user_email,
+            u.name as user_name, u.email as user_email, u.login_id as user_login_id,
             o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM employees e
      INNER JOIN users u ON e.user_id = u.id
@@ -411,6 +411,7 @@ export async function getAllEmployees(): Promise<EmployeeWithRelations[]> {
     // Add user info
     employee.userName = row.user_name;
     employee.userEmail = row.user_email;
+    (employee as any).userLoginId = row.user_login_id; // Add login_id
     
     // Add org unit if exists
     if (row.org_id) {

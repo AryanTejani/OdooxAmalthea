@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as authService from './auth.service';
-import { registerSchema, loginSchema, changePasswordSchema } from './auth.schemas';
+import { registerSchema, loginSchema, changePasswordSchema, updateProfileSchema, resetPasswordSchema } from './auth.schemas';
 import { setAuthCookies, clearAuthCookies } from '../../utils/cookies';
 import { verifyRefreshToken } from '../../utils/jwt';
 import { AppError } from '../../middleware/errors';
@@ -200,6 +200,60 @@ export async function getMeController(
 
     res.json({
       user,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Update profile controller
+ */
+export async function updateProfileController(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      throw new AppError('UNAUTHORIZED', 'Not authenticated', 401);
+    }
+
+    const input = updateProfileSchema.parse(req.body);
+    const user = await authService.updateProfile(req.user.userId, input);
+
+    res.json({
+      user,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Reset password controller (admin only)
+ */
+export async function resetPasswordController(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      throw new AppError('UNAUTHORIZED', 'Not authenticated', 401);
+    }
+
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      throw new AppError('FORBIDDEN', 'Only admin can reset passwords', 403);
+    }
+
+    const input = resetPasswordSchema.parse(req.body);
+    const result = await authService.resetPassword(input.login_id);
+
+    res.json({
+      login_id: result.loginId,
+      temp_password: result.tempPassword,
     });
   } catch (error) {
     next(error);
