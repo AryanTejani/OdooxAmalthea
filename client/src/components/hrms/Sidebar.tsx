@@ -13,6 +13,7 @@ import {
   Timer,
   FolderKanban,
   ListTodo,
+  Key,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -88,6 +89,13 @@ const navItems: NavItem[] = [
     title: 'Employees',
     href: '/hrms/employees',
     icon: Users,
+  },
+  {
+    title: 'Reset Passwords',
+    href: '/hrms/reset-passwords',
+    icon: Key,
+    roles: ['admin'],
+    badge: 'Admin',
   },
   {
     title: 'Profile',

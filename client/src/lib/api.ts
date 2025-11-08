@@ -79,8 +79,27 @@ export interface User {
   loginId?: string | null;
   mustChangePassword?: boolean;
   phone?: string | null;
+  about?: string | null;
+  jobLove?: string | null;
+  hobbies?: string | null;
+  skills?: string[];
+  certifications?: string[];
+  department?: string | null;
+  manager?: string | null;
+  location?: string | null;
+  company?: string | null;
   createdAt: string;
   updatedAt: string;
+  employee?: {
+    id: string;
+    userId: string;
+    code: string;
+    title?: string | null;
+    orgUnit?: {
+      id: string;
+      name: string;
+    } | null;
+  };
 }
 
 export interface AuthResponse {
@@ -114,9 +133,30 @@ export const authApi = {
     };
   },
 
-  changePassword: async (data: { currentPassword: string; newPassword: string }): Promise<User> => {
+  changePassword: async (data: { currentPassword: string; newPassword: string; confirmPassword: string }): Promise<User> => {
     const response = await api.post<AuthResponse>('/api/auth/change-password', data);
     return response.data.user;
+  },
+
+  updateProfile: async (data: {
+    phone?: string;
+    department?: string;
+    manager?: string;
+    location?: string;
+    company?: string;
+    about?: string;
+    jobLove?: string;
+    hobbies?: string;
+    skills?: string[];
+    certifications?: string[];
+  }): Promise<User> => {
+    const response = await api.patch<AuthResponse>('/api/auth/me/profile', data);
+    return response.data.user;
+  },
+
+  resetPassword: async (data: { login_id: string }): Promise<{ login_id: string; temp_password: string }> => {
+    const response = await api.post<{ login_id: string; temp_password: string }>('/api/users/reset-password', data);
+    return response.data;
   },
 
   logout: async (): Promise<void> => {
@@ -157,6 +197,7 @@ export interface Employee {
   orgUnit?: OrgUnit | null;
   userName?: string;
   userEmail?: string;
+  userLoginId?: string;
 }
 
 export interface Attendance {
@@ -500,6 +541,66 @@ export const hrmsApi = {
 
   deleteTimeLog: async (id: string): Promise<void> => {
     await api.delete(`/api/time-tracking/time-logs/${id}`);
+  },
+
+  // Employee Salary
+  getEmployeeSalary: async (employeeId: string): Promise<{
+    basic_salary: number;
+    allowances: Record<string, number>;
+    monthly_wage: number;
+    yearly_wage: number;
+    pf_employee: number;
+    pf_employer: number;
+    professional_tax: number;
+    net_salary: number;
+  }> => {
+    const response = await api.get<{ data: {
+      basic_salary: number;
+      allowances: Record<string, number>;
+      monthly_wage: number;
+      yearly_wage: number;
+      pf_employee: number;
+      pf_employer: number;
+      professional_tax: number;
+      net_salary: number;
+    } }>(`/api/employees/${employeeId}/salary`);
+    return response.data.data;
+  },
+
+  // Salary Configuration
+  getSalaryConfiguration: async (employeeId: string): Promise<{
+    wage: number;
+    wageType: 'FIXED';
+    componentConfig: Record<string, {
+      type: 'PERCENTAGE_OF_WAGE' | 'PERCENTAGE_OF_BASIC' | 'FIXED_AMOUNT' | 'REMAINING_AMOUNT';
+      value: number;
+    }>;
+    pfRate: number;
+    professionalTax: number;
+    basic: number;
+    allowances: Record<string, number>;
+    monthlyWage: number;
+    yearlyWage: number;
+    pfEmployee: number;
+    pfEmployer: number;
+    netSalary: number;
+  }> => {
+    const response = await api.get<{ data: any }>(`/api/employees/${employeeId}/configuration`);
+    return response.data.data;
+  },
+
+  updateSalaryConfiguration: async (employeeId: string, data: {
+    wage?: number;
+    wageType?: 'FIXED';
+    componentConfig?: Record<string, {
+      type: 'PERCENTAGE_OF_WAGE' | 'PERCENTAGE_OF_BASIC' | 'FIXED_AMOUNT' | 'REMAINING_AMOUNT';
+      value: number;
+    }>;
+    pfRate?: number;
+    professionalTax?: number;
+  }): Promise<any> => {
+    const response = await api.put<{ data: any }>(`/api/employees/${employeeId}/configuration`, data);
+    return response.data.data;
   },
 };
 

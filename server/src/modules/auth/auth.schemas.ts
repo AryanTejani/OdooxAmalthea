@@ -41,7 +41,38 @@ export const changePasswordSchema = z.object({
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number')
     .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+  confirmPassword: z.string().min(1, 'Confirm password is required'),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
 });
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+/**
+ * Update profile schema
+ */
+export const updateProfileSchema = z.object({
+  phone: z.string().optional(),
+  department: z.string().optional(),
+  manager: z.string().optional(),
+  location: z.string().optional(),
+  company: z.string().optional(),
+  about: z.string().optional(),
+  jobLove: z.string().optional(),
+  hobbies: z.string().optional(),
+  skills: z.array(z.string()).optional(),
+  certifications: z.array(z.string()).optional(),
+});
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+/**
+ * Reset password schema (admin only)
+ */
+export const resetPasswordSchema = z.object({
+  login_id: z.string().min(1, 'Login ID is required'),
+});
+
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 

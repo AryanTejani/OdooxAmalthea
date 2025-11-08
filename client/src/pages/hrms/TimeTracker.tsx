@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/auth/AuthContext';
 import { hrmsApi, getErrorMessage } from '@/lib/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -52,7 +51,6 @@ function useElapsedTime(startTime: string | null | undefined, isActive: boolean)
 }
 
 export function TimeTracker() {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');

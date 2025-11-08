@@ -8,7 +8,7 @@ import { HRMSLayout } from '@/components/hrms/HRMSLayout';
 import { queryClient } from '@/lib/queryClient';
 import { Login } from '@/pages/Login';
 import { Register } from '@/pages/Register';
-import { Profile } from '@/pages/Profile';
+import { Profile } from '@/pages/hrms/Profile';
 import { FirstLogin } from '@/pages/FirstLogin';
 import { Landing } from '@/pages/hrms/Landing';
 import { Dashboard } from '@/pages/hrms/Dashboard';
@@ -20,6 +20,7 @@ import { Employees } from '@/pages/hrms/Employees';
 import { TimeTracker } from '@/pages/hrms/TimeTracker';
 import { Timeline } from '@/pages/hrms/Timeline';
 import { TimeLogs } from '@/pages/hrms/TimeLogs';
+import { ResetPasswords } from '@/pages/hrms/ResetPasswords';
 
 function App() {
   return (
@@ -141,6 +142,16 @@ function App() {
                 <RoleProtectedRoute allowedRoles={['admin', 'hr']} feature="Time Logs">
                   <HRMSLayout>
                     <TimeLogs />
+                  </HRMSLayout>
+                </RoleProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/reset-passwords"
+              element={
+                <RoleProtectedRoute allowedRoles={['admin']} feature="Reset Passwords">
+                  <HRMSLayout>
+                    <ResetPasswords />
                   </HRMSLayout>
                 </RoleProtectedRoute>
               }
