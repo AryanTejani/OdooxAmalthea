@@ -7,7 +7,7 @@ import { logger } from '../../config/logger';
 import { AppError } from '../../middleware/errors';
 
 export const leaveService = {
-  async createLeaveRequest(data: CreateLeaveRequestInput, employeeId: string, userId: string) {
+  async createLeaveRequest(data: CreateLeaveRequestInput, employeeId: string, userId: string, companyId: string) {
     const leave = await leaveRepo.create({
       employeeId,
       type: data.type,
@@ -48,16 +48,16 @@ export const leaveService = {
     return leave;
   },
 
-  async getMyLeaveRequests(employeeId: string) {
-    return leaveRepo.getByEmployeeId(employeeId);
+  async getMyLeaveRequests(employeeId: string, companyId: string) {
+    return leaveRepo.getByEmployeeId(employeeId, companyId);
   },
 
-  async getPendingLeaveRequests() {
-    return leaveRepo.getPending();
+  async getPendingLeaveRequests(companyId: string) {
+    return leaveRepo.getPending(companyId);
   },
 
-  async updateLeaveRequest(id: string, data: UpdateLeaveRequestInput, userId: string, employeeId: string) {
-    const existing = await leaveRepo.getById(id);
+  async updateLeaveRequest(id: string, data: UpdateLeaveRequestInput, userId: string, employeeId: string, companyId: string) {
+    const existing = await leaveRepo.getById(id, companyId);
     if (!existing) {
       throw new AppError('NOT_FOUND', 'Leave request not found', 404);
     }
@@ -108,7 +108,7 @@ export const leaveService = {
       updateData.attachmentUrl = data.attachmentUrl || null;
     }
 
-    const updated = await leaveRepo.update(id, updateData);
+    const updated = await leaveRepo.update(id, companyId, updateData);
 
     // Log activity
     await activityRepo.create({
@@ -137,8 +137,8 @@ export const leaveService = {
     return updated;
   },
 
-  async approveLeaveRequest(id: string, data: ApproveLeaveInput) {
-    const leave = await leaveRepo.getById(id);
+  async approveLeaveRequest(id: string, data: ApproveLeaveInput, companyId: string) {
+    const leave = await leaveRepo.getById(id, companyId);
     if (!leave) {
       throw new Error('Leave request not found');
     }
@@ -147,7 +147,7 @@ export const leaveService = {
       throw new Error('Leave request is not pending');
     }
 
-    const approved = await leaveRepo.approve(id, data.approverId);
+    const approved = await leaveRepo.approve(id, data.approverId, companyId);
 
     // Log activity
     await activityRepo.create({
@@ -175,8 +175,8 @@ export const leaveService = {
     return approved;
   },
 
-  async rejectLeaveRequest(id: string, data: RejectLeaveInput) {
-    const leave = await leaveRepo.getById(id);
+  async rejectLeaveRequest(id: string, data: RejectLeaveInput, companyId: string) {
+    const leave = await leaveRepo.getById(id, companyId);
     if (!leave) {
       throw new Error('Leave request not found');
     }
@@ -185,7 +185,7 @@ export const leaveService = {
       throw new Error('Leave request is not pending');
     }
 
-    const rejected = await leaveRepo.reject(id, data.approverId);
+    const rejected = await leaveRepo.reject(id, data.approverId, companyId);
 
     // Log activity
     await activityRepo.create({

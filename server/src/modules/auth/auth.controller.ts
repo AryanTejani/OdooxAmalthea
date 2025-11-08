@@ -4,7 +4,6 @@ import { registerSchema, loginSchema, changePasswordSchema, updateProfileSchema,
 import { setAuthCookies, clearAuthCookies } from '../../utils/cookies';
 import { verifyRefreshToken } from '../../utils/jwt';
 import { AppError } from '../../middleware/errors';
-import { requireAuth } from '../../middleware/requireAuth';
 
 /**
  * Register controller
@@ -196,7 +195,7 @@ export async function getMeController(
       throw new AppError('UNAUTHORIZED', 'Not authenticated', 401);
     }
 
-    const user = await authService.getMe(req.user.userId);
+    const user = await authService.getMe(req.user.userId, req.companyId);
 
     res.json({
       user,
@@ -243,13 +242,17 @@ export async function resetPasswordController(
       throw new AppError('UNAUTHORIZED', 'Not authenticated', 401);
     }
 
+    if (!req.companyId) {
+      throw new AppError('NO_COMPANY', 'User is not associated with a company', 403);
+    }
+
     // Check if user is admin
     if (req.user.role !== 'admin') {
       throw new AppError('FORBIDDEN', 'Only admin can reset passwords', 403);
     }
 
     const input = resetPasswordSchema.parse(req.body);
-    const result = await authService.resetPassword(input.login_id);
+    const result = await authService.resetPassword(input.login_id, req.companyId);
 
     res.json({
       login_id: result.loginId,

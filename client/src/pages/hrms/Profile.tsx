@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthContext';
-import { authApi, hrmsApi, getErrorMessage } from '@/lib/api';
+import { useBrand } from '@/context/BrandContext';
+import { authApi, hrmsApi, companyApi, getErrorMessage } from '@/lib/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Edit2, X, Plus, Save } from 'lucide-react';
+import { Loader2, Edit2, X, Plus, Save, Building2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -30,8 +31,12 @@ import {
 
 export function Profile() {
   const { user: authUser, refreshUser } = useAuth();
+  const { company, refreshCompany } = useBrand();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('resume');
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [companyName, setCompanyName] = useState('');
+  const [companyLogoUrl, setCompanyLogoUrl] = useState('');
 
   // Get user profile with employee info
   const { data: user, isLoading } = useQuery({
@@ -41,8 +46,8 @@ export function Profile() {
   });
 
   // Get salary configuration if admin/payroll and has employee
-  const canViewSalary = user && (user.role === 'admin' || user.role === 'manager') && user.employee;
-  const canEditSalary = user && (user.role === 'admin' || user.role === 'manager') && user.employee;
+  const canViewSalary = user && (user.role === 'admin' || user.role === 'payroll') && user.employee;
+  const canEditSalary = user && (user.role === 'admin' || user.role === 'payroll') && user.employee;
   const { data: salaryConfig, isLoading: isLoadingSalaryConfig } = useQuery({
     queryKey: ['employee', 'salary-config', user?.employee?.id],
     queryFn: () => hrmsApi.getSalaryConfiguration(user!.employee!.id),
@@ -187,7 +192,7 @@ export function Profile() {
   const [department, setDepartment] = useState('');
   const [manager, setManager] = useState('');
   const [location, setLocation] = useState('');
-  const [company, setCompany] = useState('');
+  const [userCompany, setUserCompany] = useState(''); // User's company field (text), not the Company entity
 
   // Security tab state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -206,9 +211,17 @@ export function Profile() {
       setDepartment(user.department || '');
       setManager(user.manager || '');
       setLocation(user.location || '');
-      setCompany(user.company || '');
+      setUserCompany(user.company || '');
     }
   }, [user]);
+
+  // Initialize company form data (must be before any conditional returns)
+  useEffect(() => {
+    if (company) {
+      setCompanyName(company.name);
+      setCompanyLogoUrl(company.logoUrl || '');
+    }
+  }, [company]);
 
   // Profile update mutation
   const updateProfileMutation = useMutation({
@@ -256,7 +269,7 @@ export function Profile() {
       department: department || undefined,
       manager: manager || undefined,
       location: location || undefined,
-      company: company || undefined,
+      company: userCompany || undefined,
     });
   };
 
@@ -315,7 +328,9 @@ export function Profile() {
     return null;
   }
 
-  const showSalaryTab = user.role === 'admin' || user.role === 'manager';
+  // After the check above, user is guaranteed to be defined
+  const showSalaryTab = user.role === 'admin' || user.role === 'payroll';
+  const showCompanyTab = user.role === 'admin';
 
   return (
     <div className="space-y-6 p-6">
@@ -362,6 +377,7 @@ export function Profile() {
           <TabsTrigger value="resume">Resume</TabsTrigger>
           <TabsTrigger value="private">Private Info</TabsTrigger>
           {showSalaryTab && <TabsTrigger value="salary">Salary Info</TabsTrigger>}
+          {showCompanyTab && <TabsTrigger value="company">Company</TabsTrigger>}
           <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
 
@@ -527,8 +543,8 @@ export function Profile() {
                   <Label htmlFor="company">Company</Label>
                   <Input
                     id="company"
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
+                    value={userCompany}
+                    onChange={(e) => setUserCompany(e.target.value)}
                     placeholder="Enter company"
                   />
                 </div>
@@ -1161,6 +1177,138 @@ export function Profile() {
                   <div className="text-center py-12">
                     <p className="text-muted-foreground">Salary configuration not available</p>
                   </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* Company Tab */}
+        {showCompanyTab && (
+          <TabsContent value="company">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Company Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {company ? (
+                  <>
+                    {editingCompany ? (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="companyName">Company Name</Label>
+                          <Input
+                            id="companyName"
+                            value={companyName}
+                            onChange={(e) => setCompanyName(e.target.value)}
+                            placeholder="Company Name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="companyLogoUrl">Logo URL</Label>
+                          <Input
+                            id="companyLogoUrl"
+                            value={companyLogoUrl}
+                            onChange={(e) => setCompanyLogoUrl(e.target.value)}
+                            placeholder="https://example.com/logo.png"
+                          />
+                          <p className="text-sm text-muted-foreground">
+                            Enter a direct URL to your company logo image
+                          </p>
+                        </div>
+                        {companyLogoUrl && (
+                          <div className="space-y-2">
+                            <Label>Logo Preview</Label>
+                            <div className="flex items-center gap-4">
+                              <img
+                                src={companyLogoUrl}
+                                alt="Company logo"
+                                className="h-16 w-16 rounded-lg object-cover border"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                              <p className="text-sm text-muted-foreground">
+                                Logo preview (if URL is valid)
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={async () => {
+                              try {
+                                await companyApi.update({
+                                  name: companyName,
+                                  logoUrl: companyLogoUrl || null,
+                                });
+                                await refreshCompany();
+                                setEditingCompany(false);
+                                toast.success('Company information updated successfully');
+                              } catch (error) {
+                                toast.error(getErrorMessage(error));
+                              }
+                            }}
+                          >
+                            <Save className="h-4 w-4 mr-2" />
+                            Save Changes
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (company) {
+                                setEditingCompany(false);
+                                setCompanyName(company.name);
+                                setCompanyLogoUrl(company.logoUrl || '');
+                              }
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-4">
+                            {company.logoUrl && (
+                              <img
+                                src={company.logoUrl}
+                                alt={company.name}
+                                className="h-20 w-20 rounded-lg object-cover border"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            )}
+                            <div>
+                              <p className="text-sm text-muted-foreground">Company Name</p>
+                              <p className="text-lg font-semibold">{company.name}</p>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Company Code</p>
+                            <p className="text-lg font-semibold">{company.code}</p>
+                          </div>
+                          {company.logoUrl && (
+                            <div>
+                              <p className="text-sm text-muted-foreground">Logo URL</p>
+                              <p className="text-sm text-gray-600 break-all">{company.logoUrl}</p>
+                            </div>
+                          )}
+                        </div>
+                        <Button onClick={() => setEditingCompany(true)}>
+                          <Edit2 className="h-4 w-4 mr-2" />
+                          Edit Company Information
+                        </Button>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No company information available</p>
                 )}
               </CardContent>
             </Card>

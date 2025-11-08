@@ -3,6 +3,7 @@ import { env } from './config/env';
 import { logger } from './config/logger';
 import { healthCheck, closePool } from './libs/db';
 import { setupRealtime, closeRealtime } from './realtime';
+import { initEmailService, verifyEmailConnection } from './services/email.service';
 import { Server as HTTPServer } from 'http';
 
 const PORT = env.PORT;
@@ -15,6 +16,10 @@ async function start() {
       throw new Error('Database connection failed');
     }
     logger.info('✅ Database connected');
+
+    // Initialize email service
+    initEmailService();
+    await verifyEmailConnection();
 
     // Start server
     const server = app.listen(PORT, () => {

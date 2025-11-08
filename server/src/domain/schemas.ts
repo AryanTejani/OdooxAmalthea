@@ -6,14 +6,18 @@ export const createOrgUnitSchema = z.object({
   parentId: z.string().uuid().optional(),
 });
 
-// Employee
+// Employee/User creation - now supports role selection
 export const createEmployeeSchema = z.object({
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
   email: z.string().email(),
   phone: z.string().optional(),
-  companyName: z.string().min(1).max(100),
-  orgUnitId: z.string().uuid().optional(),
+  companyName: z.string().min(1).max(100).optional(), // Deprecated: kept for backward compatibility, ignored
+  role: z.enum(['admin', 'hr', 'payroll', 'employee']).default('employee'),
+  orgUnitId: z.preprocess(
+    (val) => (val === '' || val === null || val === undefined ? undefined : val),
+    z.string().uuid().optional()
+  ),
   title: z.string().max(255).optional(),
   joinDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD format
   salaryConfig: z.object({

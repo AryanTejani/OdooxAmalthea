@@ -12,7 +12,7 @@ interface AccessDeniedProps {
 const roleDisplayNames: Record<string, string> = {
   admin: 'Admin',
   hr: 'HR Officer',
-  manager: 'Payroll Officer',
+  payroll: 'Payroll Officer',
   employee: 'Employee',
 };
 

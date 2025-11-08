@@ -45,7 +45,12 @@ export async function tx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> 
     return result;
   } catch (error) {
     await client.query('ROLLBACK');
-    logger.error({ error }, 'Transaction error');
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    logger.error({ 
+      error: errorMessage, 
+      stack: errorStack,
+    }, 'Transaction error');
     throw error;
   } finally {
     client.release();

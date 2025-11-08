@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
+import { useBrand } from '@/context/BrandContext';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -15,6 +16,7 @@ import {
   ListTodo,
   Key,
   Settings,
+  Building2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -122,6 +124,7 @@ const navItems: NavItem[] = [
 export function Sidebar() {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { company } = useBrand();
 
   const handleLogout = async () => {
     try {
@@ -144,12 +147,37 @@ export function Sidebar() {
         {/* Logo/Brand */}
         <div className="flex items-center flex-shrink-0 px-6 mb-8">
           <div className="flex items-center space-x-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-600">
-              <Users className="h-6 w-6 text-white" />
+            {company?.logoUrl ? (
+              <img
+                src={company.logoUrl}
+                alt={company.name}
+                className="h-10 w-10 rounded-lg object-cover"
+                onError={(e) => {
+                  // Fallback to icon if image fails to load
+                  (e.target as HTMLImageElement).style.display = 'none';
+                  (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+            ) : null}
+            <div
+              className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-lg bg-violet-600',
+                company?.logoUrl && 'hidden'
+              )}
+            >
+              {company?.logoUrl ? (
+                <Building2 className="h-6 w-6 text-white" />
+              ) : (
+                <Users className="h-6 w-6 text-white" />
+              )}
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-violet-900">WorkZen</h1>
-              <p className="text-xs text-violet-600">HRMS Platform</p>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg font-bold text-violet-900 truncate">
+                {company?.name || 'WorkZen'}
+              </h1>
+              <p className="text-xs text-violet-600">
+                {company ? `Code: ${company.code}` : 'HRMS Platform'}
+              </p>
             </div>
           </div>
         </div>

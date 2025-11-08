@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import * as leaveController from './leave.controller';
-import { requireAuth } from '../../middleware/requireAuth';
+import { requireAuth } from '../../middleware/auth';
+import { requireTenant } from '../../middleware/tenant';
 import { requireLeaveApprover } from '../../middleware/rbac';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication and tenant context
 router.use(requireAuth);
+router.use(requireTenant);
 
 // Create leave request
 router.post('/', leaveController.createLeaveRequestController);

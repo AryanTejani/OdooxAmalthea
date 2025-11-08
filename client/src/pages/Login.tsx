@@ -130,6 +130,16 @@ export function Login() {
           <p className="text-sm text-muted-foreground text-center">
             Accounts are created by HR/Admin. Contact your administrator for access.
           </p>
+          <p className="text-sm text-muted-foreground text-center">
+            Company Admin?{' '}
+            <Link to="/saas/login" className="text-primary hover:underline">
+              Sign in with company code
+            </Link>
+            {' or '}
+            <Link to="/saas/signup" className="text-primary hover:underline">
+              create a new company
+            </Link>
+          </p>
         </CardFooter>
       </Card>
     </div>

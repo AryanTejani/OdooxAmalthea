@@ -43,9 +43,13 @@ export async function getAttendanceDayController(
       throw new AppError('VALIDATION_ERROR', 'Invalid date (e.g., month > 12 or day > 31)', 400);
     }
     
+    if (!req.companyId) {
+      throw new AppError('NO_COMPANY', 'User is not associated with a company', 403);
+    }
+    
     const searchQuery = req.query.q as string | undefined;
     
-    const rows = await attendanceV2Repo.getAttendanceDay(dateStr, searchQuery);
+    const rows = await attendanceV2Repo.getAttendanceDay(dateStr, req.companyId, searchQuery);
     
     res.json({ data: rows });
   } catch (error) {
@@ -66,8 +70,12 @@ export async function getAttendanceMeController(
       throw new AppError('UNAUTHORIZED', 'Not authenticated', 401);
     }
     
-    // Get employee
-    const employee = await getEmployeeByUserId(req.user.userId);
+    if (!req.companyId) {
+      throw new AppError('NO_COMPANY', 'User is not associated with a company', 403);
+    }
+    
+    // Get employee (filtered by company)
+    const employee = await getEmployeeByUserId(req.user.userId, req.companyId);
     if (!employee) {
       throw new AppError('NOT_FOUND', 'Employee not found', 404);
     }
@@ -82,7 +90,7 @@ export async function getAttendanceMeController(
       throw new AppError('VALIDATION_ERROR', 'Invalid month format', 400);
     }
     
-    const result = await attendanceV2Repo.getAttendanceMe(employee.id, year, monthNum);
+    const result = await attendanceV2Repo.getAttendanceMe(employee.id, req.companyId, year, monthNum);
     
     res.json({ data: result });
   } catch (error) {
@@ -109,7 +117,11 @@ export async function getPayableSummaryController(
       throw new AppError('VALIDATION_ERROR', 'Invalid month format', 400);
     }
     
-    const summary = await attendanceV2Repo.getPayableSummary(year, monthNum);
+    if (!req.companyId) {
+      throw new AppError('NO_COMPANY', 'User is not associated with a company', 403);
+    }
+    
+    const summary = await attendanceV2Repo.getPayableSummary(req.companyId, year, monthNum);
     
     res.json({ data: summary });
   } catch (error) {

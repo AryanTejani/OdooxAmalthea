@@ -1,9 +1,5 @@
 import { query } from '../../libs/db';
 import {
-  getActiveMinutes,
-  getInOutTimes,
-  getApprovedLeave,
-  formatMinutesToHHMM,
   getTotalWorkingDays,
   isPayableDay,
 } from './attendance.helpers';
@@ -52,10 +48,11 @@ export interface PayableSummaryRow {
 }
 
 /**
- * Get attendance day view for admin/hr/payroll (all employees for a specific day)
+ * Get attendance day view for admin/hr/payroll (all employees for a specific day) - filtered by company
  */
 export async function getAttendanceDay(
   dateStr: string, // YYYY-MM-DD format
+  companyId: string,
   searchQuery?: string
 ): Promise<AttendanceDayRow[]> {
   
@@ -69,14 +66,15 @@ export async function getAttendanceDay(
       MAX(COALESCE(tl.end_time, tl.start_time)) AS out_at,
       COALESCE(SUM(tl.duration), 0)::bigint AS total_seconds
     FROM employees e
-    INNER JOIN users u ON e.user_id = u.id
+    INNER JOIN users u ON e.user_id = u.id AND u.company_id = $2
     LEFT JOIN time_logs tl ON e.id = tl.employee_id 
+      AND tl.company_id = $2
       AND tl.start_time::date = $1
       AND tl.end_time IS NOT NULL
-    WHERE 1=1
+    WHERE e.company_id = $2
   `;
   
-  const params: any[] = [dateStr];
+  const params: any[] = [dateStr, companyId];
   
   if (searchQuery) {
     const searchParam = `%${searchQuery}%`;
@@ -114,10 +112,11 @@ export async function getAttendanceDay(
 }
 
 /**
- * Get attendance month view for employee (own attendance)
+ * Get attendance month view for employee (own attendance) - filtered by company
  */
 export async function getAttendanceMe(
   employeeId: string,
+  companyId: string,
   year: number,
   month: number
 ): Promise<AttendanceMeResponse> {
@@ -143,12 +142,13 @@ export async function getAttendanceMe(
        COALESCE(SUM(duration), 0)::bigint AS total_seconds
      FROM time_logs
      WHERE employee_id = $1 
+       AND company_id = $4
        AND start_time::date >= $2 
        AND start_time::date <= $3
        AND end_time IS NOT NULL
      GROUP BY start_time::date
      ORDER BY day`,
-    [employeeId, startStr, endStr]
+    [employeeId, startStr, endStr, companyId]
   );
   
   const timeLogMap = new Map<string, {
@@ -168,17 +168,18 @@ export async function getAttendanceMe(
     });
   });
   
-  // Get all approved leaves for the month in one query
+  // Get all approved leaves for the month in one query (filtered by company)
   const leaveResult = await query(
     `SELECT 
        generate_series(start_date, end_date, '1 day'::interval)::date AS day,
        type
      FROM leave_requests
      WHERE employee_id = $1 
+       AND company_id = $4
        AND status = 'APPROVED'
        AND start_date <= $3
        AND end_date >= $2`,
-    [employeeId, startStr, endStr]
+    [employeeId, startStr, endStr, companyId]
   );
   
   const leaveMap = new Map<string, string>();
@@ -195,8 +196,7 @@ export async function getAttendanceMe(
     }
   });
   
-  // Only show days with time logs OR approved leave (simplified for hackathon)
-  // Collect all days that should be shown
+  // Collect all days that should be shown in the UI (days with activity OR leave)
   const daysToShow = new Set<string>();
   
   // Add all days with time logs (filter to month range)
@@ -211,10 +211,10 @@ export async function getAttendanceMe(
     daysToShow.add(dayStr);
   });
   
-  // Convert to sorted array
+  // Convert to sorted array for UI display
   const sortedDays = Array.from(daysToShow).sort();
   
-  // Process each day that should be shown
+  // Process each day that should be shown in UI
   for (const dayStr of sortedDays) {
     const timeLog = timeLogMap.get(dayStr);
     const leaveType = leaveMap.get(dayStr) || null;
@@ -223,17 +223,6 @@ export async function getAttendanceMe(
     const workSeconds = timeLog?.totalSeconds || 0;
     const workHours = workSeconds / 3600; // Convert seconds to hours (decimal)
     const extraHours = Math.max(0, workHours - env.WORK_HOURS_PER_DAY);
-    
-    // If on leave, count as leave (not present)
-    if (leaveType) {
-      leaveDays++;
-      if (leaveType === 'UNPAID') {
-        unpaidLeaveDays++;
-      }
-    } else if (workHours >= env.MIN_ACTIVE_HOURS_PRESENT) {
-      // Only count as present if not on leave and has sufficient activity
-      presentDays++;
-    }
     
     const payable = isPayableDay(workHours, leaveType);
     
@@ -248,10 +237,42 @@ export async function getAttendanceMe(
     });
   }
   
-  // Also count business days for KPI calculation (even if no activity)
-  // This is used for "total working days" calculation
+  // For KPI calculation: Process ALL days in the month (not just days with activity)
+  // This ensures payable days calculation matches the payroll summary
+  // If WORK_WEEK_MON_TO_FRI is true, only count business days (Mon-Fri)
+  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    // Skip weekends if WORK_WEEK_MON_TO_FRI is enabled
+    if (env.WORK_WEEK_MON_TO_FRI) {
+      const dayOfWeek = d.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        // Skip weekends (Sunday = 0, Saturday = 6)
+        continue;
+      }
+    }
+    
+    const dayStr = d.toISOString().split('T')[0];
+    const timeLog = timeLogMap.get(dayStr);
+    const leaveType = leaveMap.get(dayStr) || null;
+    
+    // Use total_seconds from time_logs (already calculated correctly)
+    const workSeconds = timeLog?.totalSeconds || 0;
+    const workHours = workSeconds / 3600; // Convert seconds to hours (decimal)
+    
+    // Count KPI metrics: Process each working day in the month
+    if (leaveType) {
+      // If on leave, count as leave (not present)
+      leaveDays++;
+      if (leaveType === 'UNPAID') {
+        unpaidLeaveDays++;
+      }
+    } else if (workHours >= env.MIN_ACTIVE_HOURS_PRESENT) {
+      // Only count as present if not on leave and has sufficient activity
+      presentDays++;
+    }
+    // Days with no leave and insufficient work hours are not counted (absent)
+  }
   
-  // Calculate payable days
+  // Calculate payable days: Present Days + Paid Leave Days
   const payableDays = presentDays + (leaveDays - unpaidLeaveDays);
   
   return {
@@ -267,9 +288,10 @@ export async function getAttendanceMe(
 }
 
 /**
- * Get payable summary for payroll (all employees for a month)
+ * Get payable summary for payroll (all employees for a month) - filtered by company
  */
 export async function getPayableSummary(
+  companyId: string,
   year: number,
   month: number
 ): Promise<PayableSummaryRow[]> {
@@ -279,13 +301,14 @@ export async function getPayableSummary(
   const endStr = endDate.toISOString().split('T')[0];
   const totalWorkingDays = getTotalWorkingDays(year, month);
   
-  // Get all employees
+  // Get all employees for this company
   const employeesResult = await query(
     `SELECT e.id, e.user_id, u.name, u.login_id
      FROM employees e
-     INNER JOIN users u ON e.user_id = u.id
+     INNER JOIN users u ON e.user_id = u.id AND u.company_id = $1
+     WHERE e.company_id = $1
      ORDER BY u.name`,
-    []
+    [companyId]
   );
   
   const summary: PayableSummaryRow[] = [];
@@ -293,7 +316,7 @@ export async function getPayableSummary(
   for (const empRow of employeesResult.rows) {
     const employeeId = empRow.id;
     
-    // Use time_logs to calculate work hours (like time log route)
+    // Use time_logs to calculate work hours (like time log route) - filtered by company
     const timeLogResult = await query(
       `SELECT 
          start_time::date AS day,
@@ -302,24 +325,26 @@ export async function getPayableSummary(
          COALESCE(SUM(duration), 0)::bigint AS total_seconds
        FROM time_logs
        WHERE employee_id = $1 
+         AND company_id = $4
          AND start_time::date >= $2 
          AND start_time::date <= $3
          AND end_time IS NOT NULL
        GROUP BY start_time::date`,
-      [employeeId, startStr, endStr]
+      [employeeId, startStr, endStr, companyId]
     );
     
-    // Get leaves for the month
+    // Get leaves for the month (filtered by company)
     const leaveResult = await query(
       `SELECT 
          generate_series(start_date, end_date, '1 day'::interval)::date AS day,
          type
        FROM leave_requests
        WHERE employee_id = $1 
+         AND company_id = $4
          AND status = 'APPROVED'
          AND start_date <= $3
          AND end_date >= $2`,
-      [employeeId, startStr, endStr]
+      [employeeId, startStr, endStr, companyId]
     );
     
     const leaveMap = new Map<string, string>();
@@ -346,7 +371,17 @@ export async function getPayableSummary(
     let unpaidLeaveDays = 0;
     
     // Process each day in the month
+    // If WORK_WEEK_MON_TO_FRI is true, only count business days (Mon-Fri)
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      // Skip weekends if WORK_WEEK_MON_TO_FRI is enabled
+      if (env.WORK_WEEK_MON_TO_FRI) {
+        const dayOfWeek = d.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+          // Skip weekends (Sunday = 0, Saturday = 6)
+          continue;
+        }
+      }
+      
       const dayStr = d.toISOString().split('T')[0];
       const timeLog = timeLogByDay.get(dayStr);
       const leaveType = leaveMap.get(dayStr) || null;

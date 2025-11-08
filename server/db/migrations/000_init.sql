@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   email        text UNIQUE NOT NULL,
   name         text NOT NULL,
   password_hash text,
-  role         text NOT NULL DEFAULT 'user', -- 'user'|'admin'|'hr'|'manager'|'employee'
+  role         text NOT NULL DEFAULT 'employee', -- 'admin'|'hr'|'payroll'|'employee'
   created_at   timestamptz NOT NULL DEFAULT now(),
   updated_at   timestamptz NOT NULL DEFAULT now()
 );

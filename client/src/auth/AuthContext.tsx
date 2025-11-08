@@ -133,11 +133,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       await authApi.logout();
       setUser(null);
+      setMustChangePassword(false);
       setError(null);
     } catch (err) {
       console.error('Logout error:', err);
       // Clear user anyway
       setUser(null);
+      setMustChangePassword(false);
     } finally {
       setLoading(false);
     }

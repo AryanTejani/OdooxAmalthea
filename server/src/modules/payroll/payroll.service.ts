@@ -6,21 +6,21 @@ import { PoolClient } from 'pg';
 import { logger } from '../../config/logger';
 
 export const payrollService = {
-  async generatePayrun(data: GeneratePayrunInput, userId: string) {
+  async generatePayrun(data: GeneratePayrunInput, userId: string, companyId: string) {
     // Check if payrun already exists
-    const existing = await payrollRepo.getPayrunByMonth(data.month);
+    const existing = await payrollRepo.getPayrunByMonth(data.month, companyId);
     if (existing) {
       throw new Error('Payrun for this month already exists');
     }
 
     // Wrap entire payrun generation in a transaction
     return tx(async (client: PoolClient) => {
-      // Create payrun
+      // Create payrun with company_id
       const payrunResult = await client.query(
-        `INSERT INTO payruns (month, status, generated_at) 
-         VALUES ($1, 'DRAFT', now()) 
-         RETURNING id, month, status, generated_at`,
-        [data.month]
+        `INSERT INTO payruns (month, status, generated_at, company_id) 
+         VALUES ($1, 'DRAFT', now(), $2) 
+         RETURNING id, month, status, generated_at, company_id`,
+        [data.month, companyId]
       );
       const payrunRow = payrunResult.rows[0];
       const payrun = {
@@ -30,8 +30,8 @@ export const payrollService = {
         generatedAt: payrunRow.generated_at,
       };
 
-      // Get all employees with salary config
-      const employees = await payrollRepo.getEmployeesWithSalaryConfig();
+      // Get all employees with salary config (filtered by company)
+      const employees = await payrollRepo.getEmployeesWithSalaryConfig(companyId);
 
       let totalGross = 0;
       let totalNet = 0;
@@ -43,10 +43,11 @@ export const payrollService = {
           continue;
         }
 
-        // Get attendance for the month
+        // Get attendance for the month (filtered by company)
         const attendanceRecords = await payrollRepo.getAttendanceForMonth(
           employee.id,
-          data.month
+          data.month,
+          companyId
         );
 
         // Count working days (PRESENT + HALF_DAY count as 1, LEAVE as 0)
@@ -89,10 +90,10 @@ export const payrollService = {
           workingDays,
         };
 
-        // Create payslip within transaction
+        // Create payslip within transaction (with company_id)
         await client.query(
-          `INSERT INTO payslips (payrun_id, employee_id, gross, pf, professional_tax, net, breakdown) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          `INSERT INTO payslips (payrun_id, employee_id, gross, pf, professional_tax, net, breakdown, company_id) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
           [
             payrun.id,
             employee.id,
@@ -101,6 +102,7 @@ export const payrollService = {
             professionalTax,
             net,
             JSON.stringify(breakdown),
+            companyId,
           ]
         );
 
@@ -109,23 +111,19 @@ export const payrollService = {
         employeeCount++;
       }
 
-      // Log activity within transaction
-      await client.query(
-        `INSERT INTO activity (entity, ref_id, actor_id, action, meta) 
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          'payrun',
-          payrun.id,
-          userId,
-          'generate',
-          JSON.stringify({
-            month: data.month,
-            employeeCount,
-            totalGross,
-            totalNet,
-          }),
-        ]
-      );
+      // Log activity within transaction (company_id will be set from actor_id by activityRepo)
+      await activityRepo.create({
+        entity: 'payrun',
+        refId: payrun.id,
+        actorId: userId,
+        action: 'generate',
+        meta: {
+          month: data.month,
+          employeeCount,
+          totalGross,
+          totalNet,
+        },
+      });
 
       return {
         payrunId: payrun.id,
@@ -140,12 +138,12 @@ export const payrollService = {
     });
   },
 
-  async getPayruns() {
-    return payrollRepo.getPayruns();
+  async getPayruns(companyId: string) {
+    return payrollRepo.getPayruns(companyId);
   },
 
-  async finalizePayrun(payrunId: string, userId: string) {
-    const payrun = await payrollRepo.getPayrunById(payrunId);
+  async finalizePayrun(payrunId: string, userId: string, companyId: string) {
+    const payrun = await payrollRepo.getPayrunById(payrunId, companyId);
     if (!payrun) {
       throw new Error('Payrun not found');
     }
@@ -154,7 +152,7 @@ export const payrollService = {
       throw new Error('Payrun is already finalized');
     }
 
-    const finalized = await payrollRepo.finalizePayrun(payrunId);
+    const finalized = await payrollRepo.finalizePayrun(payrunId, companyId);
 
     // Log activity
     await activityRepo.create({
@@ -170,12 +168,12 @@ export const payrollService = {
     return finalized;
   },
 
-  async getPayslipsByPayrunId(payrunId: string) {
-    return payrollRepo.getPayslipsByPayrunId(payrunId);
+  async getPayslipsByPayrunId(payrunId: string, companyId: string) {
+    return payrollRepo.getPayslipsByPayrunId(payrunId, companyId);
   },
 
-  async getPayslipById(id: string) {
-    return payrollRepo.getPayslipById(id);
+  async getPayslipById(id: string, companyId: string) {
+    return payrollRepo.getPayslipById(id, companyId);
   },
 };
 

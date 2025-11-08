@@ -20,16 +20,17 @@ interface EmployeeWithSalaryConfig extends Employee {
 }
 
 /**
- * Get all payruns with payslip count
+ * Get all payruns with payslip count (filtered by company)
  */
-export async function getPayruns(): Promise<PayrunWithCount[]> {
+export async function getPayruns(companyId: string): Promise<PayrunWithCount[]> {
   const result = await query(
     `SELECT 
-       p.id, p.month, p.status, p.generated_at,
-       (SELECT COUNT(*) FROM payslips WHERE payrun_id = p.id) as payslip_count
+       p.id, p.month, p.status, p.generated_at, p.company_id,
+       (SELECT COUNT(*) FROM payslips WHERE payrun_id = p.id AND company_id = $1) as payslip_count
      FROM payruns p
+     WHERE p.company_id = $1
      ORDER BY p.month DESC`,
-    []
+    [companyId]
   );
   
   return result.rows.map((row) => ({
@@ -44,12 +45,12 @@ export async function getPayruns(): Promise<PayrunWithCount[]> {
 }
 
 /**
- * Get payrun by ID with payslips
+ * Get payrun by ID with payslips (filtered by company)
  */
-export async function getPayrunById(id: string): Promise<(Payrun & { payslips?: PayslipWithEmployee[] }) | null> {
+export async function getPayrunById(id: string, companyId: string): Promise<(Payrun & { payslips?: PayslipWithEmployee[] }) | null> {
   const payrunResult = await query(
-    'SELECT id, month, status, generated_at FROM payruns WHERE id = $1',
-    [id]
+    'SELECT id, month, status, generated_at, company_id FROM payruns WHERE id = $1 AND company_id = $2',
+    [id, companyId]
   );
   
   if (payrunResult.rows.length === 0) {
@@ -64,17 +65,18 @@ export async function getPayrunById(id: string): Promise<(Payrun & { payslips?: 
     generatedAt: payrunRow.generated_at,
   };
   
-  // Get payslips with employees
+  // Get payslips with employees (filtered by company)
   const payslipsResult = await query(
     `SELECT 
-       ps.id, ps.payrun_id, ps.employee_id, ps.gross, ps.pf, ps.professional_tax, ps.net, ps.breakdown, ps.created_at,
+       ps.id, ps.payrun_id, ps.employee_id, ps.gross, ps.pf, ps.professional_tax, ps.net, ps.breakdown, ps.company_id, ps.created_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM payslips ps
-     INNER JOIN employees e ON ps.employee_id = e.id
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     WHERE ps.payrun_id = $1`,
-    [id]
+     INNER JOIN employees e ON ps.employee_id = e.id AND e.company_id = $2
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     WHERE ps.payrun_id = $1
+     AND ps.company_id = $2`,
+    [id, companyId]
   );
   
   const payslips = payslipsResult.rows.map((row) => {
@@ -120,12 +122,12 @@ export async function getPayrunById(id: string): Promise<(Payrun & { payslips?: 
 }
 
 /**
- * Get payrun by month
+ * Get payrun by month (filtered by company)
  */
-export async function getPayrunByMonth(month: string): Promise<(Payrun & { payslips?: PayslipWithEmployee[] }) | null> {
+export async function getPayrunByMonth(month: string, companyId: string): Promise<(Payrun & { payslips?: PayslipWithEmployee[] }) | null> {
   const payrunResult = await query(
-    'SELECT id, month, status, generated_at FROM payruns WHERE month = $1',
-    [month]
+    'SELECT id, month, status, generated_at, company_id FROM payruns WHERE month = $1 AND company_id = $2',
+    [month, companyId]
   );
   
   if (payrunResult.rows.length === 0) {
@@ -140,17 +142,18 @@ export async function getPayrunByMonth(month: string): Promise<(Payrun & { paysl
     generatedAt: payrunRow.generated_at,
   };
   
-  // Get payslips with employees
+  // Get payslips with employees (filtered by company)
   const payslipsResult = await query(
     `SELECT 
-       ps.id, ps.payrun_id, ps.employee_id, ps.gross, ps.pf, ps.professional_tax, ps.net, ps.breakdown, ps.created_at,
+       ps.id, ps.payrun_id, ps.employee_id, ps.gross, ps.pf, ps.professional_tax, ps.net, ps.breakdown, ps.company_id, ps.created_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM payslips ps
-     INNER JOIN employees e ON ps.employee_id = e.id
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     WHERE ps.payrun_id = $1`,
-    [payrun.id]
+     INNER JOIN employees e ON ps.employee_id = e.id AND e.company_id = $2
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     WHERE ps.payrun_id = $1
+     AND ps.company_id = $2`,
+    [payrun.id, companyId]
   );
   
   const payslips = payslipsResult.rows.map((row) => {
@@ -196,14 +199,14 @@ export async function getPayrunByMonth(month: string): Promise<(Payrun & { paysl
 }
 
 /**
- * Create payrun
+ * Create payrun (sets company_id from creator)
  */
-export async function createPayrun(month: string): Promise<Payrun> {
+export async function createPayrun(month: string, companyId: string): Promise<Payrun> {
   const result = await query(
-    `INSERT INTO payruns (month, status, generated_at) 
-     VALUES ($1, 'DRAFT', now()) 
-     RETURNING id, month, status, generated_at`,
-    [month]
+    `INSERT INTO payruns (month, status, generated_at, company_id) 
+     VALUES ($1, 'DRAFT', now(), $2) 
+     RETURNING id, month, status, generated_at, company_id`,
+    [month, companyId]
   );
   
   const row = result.rows[0];
@@ -216,16 +219,21 @@ export async function createPayrun(month: string): Promise<Payrun> {
 }
 
 /**
- * Finalize payrun
+ * Finalize payrun (filtered by company)
  */
-export async function finalizePayrun(id: string): Promise<Payrun> {
+export async function finalizePayrun(id: string, companyId: string): Promise<Payrun> {
   const result = await query(
     `UPDATE payruns 
      SET status = 'FINALIZED' 
      WHERE id = $1 
-     RETURNING id, month, status, generated_at`,
-    [id]
+     AND company_id = $2
+     RETURNING id, month, status, generated_at, company_id`,
+    [id, companyId]
   );
+  
+  if (result.rows.length === 0) {
+    throw new Error('Payrun not found or does not belong to this company');
+  }
   
   const row = result.rows[0];
   return {
@@ -237,7 +245,7 @@ export async function finalizePayrun(id: string): Promise<Payrun> {
 }
 
 /**
- * Create payslip
+ * Create payslip (sets company_id from payrun)
  */
 export async function createPayslip(data: {
   payrunId: string;
@@ -247,11 +255,21 @@ export async function createPayslip(data: {
   professionalTax: number;
   net: number;
   breakdown: Record<string, unknown>;
+  companyId: string;
 }): Promise<PayslipWithEmployee> {
+  // Verify payrun belongs to company
+  const payrunCheck = await query(
+    'SELECT company_id FROM payruns WHERE id = $1 AND company_id = $2',
+    [data.payrunId, data.companyId]
+  );
+  if (payrunCheck.rows.length === 0) {
+    throw new Error('Payrun not found or does not belong to this company');
+  }
+
   const result = await query(
-    `INSERT INTO payslips (payrun_id, employee_id, gross, pf, professional_tax, net, breakdown) 
-     VALUES ($1, $2, $3, $4, $5, $6, $7) 
-     RETURNING id, payrun_id, employee_id, gross, pf, professional_tax, net, breakdown, created_at`,
+    `INSERT INTO payslips (payrun_id, employee_id, gross, pf, professional_tax, net, breakdown, company_id) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+     RETURNING id, payrun_id, employee_id, gross, pf, professional_tax, net, breakdown, company_id, created_at`,
     [
       data.payrunId,
       data.employeeId,
@@ -260,6 +278,7 @@ export async function createPayslip(data: {
       data.professionalTax,
       data.net,
       JSON.stringify(data.breakdown),
+      data.companyId,
     ]
   );
   
@@ -276,15 +295,16 @@ export async function createPayslip(data: {
     createdAt: row.created_at,
   };
   
-  // Get employee with org unit
+  // Get employee with org unit (filtered by company)
   const empResult = await query(
     `SELECT 
-       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.company_id, e.created_at, e.updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM employees e
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     WHERE e.id = $1`,
-    [data.employeeId]
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     WHERE e.id = $1
+     AND e.company_id = $2`,
+    [data.employeeId, data.companyId]
   );
   
   if (empResult.rows.length > 0) {
@@ -317,21 +337,22 @@ export async function createPayslip(data: {
 }
 
 /**
- * Get payslip by ID
+ * Get payslip by ID (filtered by company)
  */
-export async function getPayslipById(id: string): Promise<PayslipWithEmployee | null> {
+export async function getPayslipById(id: string, companyId: string): Promise<PayslipWithEmployee | null> {
   const result = await query(
     `SELECT 
-       ps.id, ps.payrun_id, ps.employee_id, ps.gross, ps.pf, ps.professional_tax, ps.net, ps.breakdown, ps.created_at,
+       ps.id, ps.payrun_id, ps.employee_id, ps.gross, ps.pf, ps.professional_tax, ps.net, ps.breakdown, ps.company_id, ps.created_at,
        p.id as payrun_id_full, p.month, p.status, p.generated_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM payslips ps
-     INNER JOIN payruns p ON ps.payrun_id = p.id
-     INNER JOIN employees e ON ps.employee_id = e.id
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     WHERE ps.id = $1`,
-    [id]
+     INNER JOIN payruns p ON ps.payrun_id = p.id AND p.company_id = $2
+     INNER JOIN employees e ON ps.employee_id = e.id AND e.company_id = $2
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     WHERE ps.id = $1
+     AND ps.company_id = $2`,
+    [id, companyId]
   );
   
   if (result.rows.length === 0) {
@@ -383,21 +404,22 @@ export async function getPayslipById(id: string): Promise<PayslipWithEmployee | 
 }
 
 /**
- * Get payslips by payrun ID
+ * Get payslips by payrun ID (filtered by company)
  */
-export async function getPayslipsByPayrunId(payrunId: string): Promise<PayslipWithEmployee[]> {
+export async function getPayslipsByPayrunId(payrunId: string, companyId: string): Promise<PayslipWithEmployee[]> {
   const result = await query(
     `SELECT 
-       ps.id, ps.payrun_id, ps.employee_id, ps.gross, ps.pf, ps.professional_tax, ps.net, ps.breakdown, ps.created_at,
+       ps.id, ps.payrun_id, ps.employee_id, ps.gross, ps.pf, ps.professional_tax, ps.net, ps.breakdown, ps.company_id, ps.created_at,
        p.id as payrun_id_full, p.month, p.status, p.generated_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM payslips ps
-     INNER JOIN payruns p ON ps.payrun_id = p.id
-     INNER JOIN employees e ON ps.employee_id = e.id
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     WHERE ps.payrun_id = $1`,
-    [payrunId]
+     INNER JOIN payruns p ON ps.payrun_id = p.id AND p.company_id = $2
+     INNER JOIN employees e ON ps.employee_id = e.id AND e.company_id = $2
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     WHERE ps.payrun_id = $1
+     AND ps.company_id = $2`,
+    [payrunId, companyId]
   );
   
   return result.rows.map((row) => {
@@ -446,18 +468,19 @@ export async function getPayslipsByPayrunId(payrunId: string): Promise<PayslipWi
 }
 
 /**
- * Get employees with salary config
+ * Get employees with salary config (filtered by company)
  */
-export async function getEmployeesWithSalaryConfig(): Promise<EmployeeWithSalaryConfig[]> {
+export async function getEmployeesWithSalaryConfig(companyId: string): Promise<EmployeeWithSalaryConfig[]> {
   const result = await query(
     `SELECT 
-       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.company_id, e.created_at, e.updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at,
        s.id as salary_id, s.employee_id as salary_employee_id, s.basic, s.allowances, s.created_at as salary_created_at, s.updated_at as salary_updated_at
      FROM employees e
-     INNER JOIN salary_config s ON e.id = s.employee_id
-     LEFT JOIN org_units o ON e.org_unit_id = o.id`,
-    []
+     INNER JOIN salary_config s ON e.id = s.employee_id AND s.company_id = $1
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $1
+     WHERE e.company_id = $1`,
+    [companyId]
   );
   
   return result.rows.map((row) => {
@@ -496,9 +519,9 @@ export async function getEmployeesWithSalaryConfig(): Promise<EmployeeWithSalary
 }
 
 /**
- * Get attendance for month
+ * Get attendance for month (filtered by company)
  */
-export async function getAttendanceForMonth(employeeId: string, month: string): Promise<Attendance[]> {
+export async function getAttendanceForMonth(employeeId: string, month: string, companyId: string): Promise<Attendance[]> {
   const [year, monthNum] = month.split('-').map(Number);
   const startDate = new Date(year, monthNum - 1, 1);
   const endDate = new Date(year, monthNum, 0);
@@ -507,10 +530,13 @@ export async function getAttendanceForMonth(employeeId: string, month: string): 
   const endStr = endDate.toISOString().split('T')[0];
   
   const result = await query(
-    `SELECT id, employee_id, day, in_at, out_at, status, created_at, updated_at
+    `SELECT id, employee_id, day, in_at, out_at, status, company_id, created_at, updated_at
      FROM attendance
-     WHERE employee_id = $1 AND day >= $2 AND day <= $3`,
-    [employeeId, startStr, endStr]
+     WHERE employee_id = $1 
+     AND company_id = $4
+     AND day >= $2 
+     AND day <= $3`,
+    [employeeId, startStr, endStr, companyId]
   );
   
   return result.rows.map((row) => ({

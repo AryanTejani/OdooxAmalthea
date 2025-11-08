@@ -20,7 +20,16 @@ import { query } from '../../libs/db';
 
 export async function getAllProjectsController(req: Request, res: Response): Promise<void> {
   try {
-    const projects = await timeTrackingService.getAllProjects();
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
+    const projects = await timeTrackingService.getAllProjects(req.companyId);
     res.json({ data: projects });
   } catch (error) {
     logger.error({ error }, 'Failed to get projects');
@@ -35,8 +44,17 @@ export async function getAllProjectsController(req: Request, res: Response): Pro
 
 export async function getProjectByIdController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { id } = req.params;
-    const project = await timeTrackingService.getProjectById(id);
+    const project = await timeTrackingService.getProjectById(id, req.companyId);
     
     if (!project) {
       res.status(404).json({
@@ -62,12 +80,22 @@ export async function getProjectByIdController(req: Request, res: Response): Pro
 
 export async function createProjectController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const input = createProjectSchema.parse(req.body);
     const userId = req.user!.userId;
     
     const project = await timeTrackingService.createProject({
       ...input,
       createdBy: userId,
+      companyId: req.companyId,
     });
     
     res.status(201).json({ data: project });
@@ -95,10 +123,19 @@ export async function createProjectController(req: Request, res: Response): Prom
 
 export async function updateProjectController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { id } = req.params;
     const input = updateProjectSchema.parse(req.body);
     
-    const project = await timeTrackingService.updateProject(id, input);
+    const project = await timeTrackingService.updateProject(id, req.companyId, input);
     
     if (!project) {
       res.status(404).json({
@@ -135,8 +172,17 @@ export async function updateProjectController(req: Request, res: Response): Prom
 
 export async function deleteProjectController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { id } = req.params;
-    const deleted = await timeTrackingService.deleteProject(id);
+    const deleted = await timeTrackingService.deleteProject(id, req.companyId);
     
     if (!deleted) {
       res.status(404).json({
@@ -164,8 +210,17 @@ export async function deleteProjectController(req: Request, res: Response): Prom
 
 export async function getTasksByProjectController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { projectId } = req.params;
-    const tasks = await timeTrackingService.getTasksByProject(projectId);
+    const tasks = await timeTrackingService.getTasksByProject(projectId, req.companyId);
     res.json({ data: tasks });
   } catch (error) {
     logger.error({ error }, 'Failed to get tasks');
@@ -180,11 +235,20 @@ export async function getTasksByProjectController(req: Request, res: Response): 
 
 export async function getTasksByEmployeeController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const userId = req.user!.userId;
     const userRole = req.user!.role;
     
     // Ensure employee record exists (auto-create for HR/Payroll/Admin)
-    const employee = await ensureEmployeeRecord(userId, userRole);
+    const employee = await ensureEmployeeRecord(userId, userRole, req.companyId);
     
     if (!employee) {
       res.status(404).json({
@@ -196,7 +260,7 @@ export async function getTasksByEmployeeController(req: Request, res: Response):
       return;
     }
     
-    const tasks = await timeTrackingService.getTasksByEmployee(employee.id);
+    const tasks = await timeTrackingService.getTasksByEmployee(employee.id, req.companyId);
     res.json({ data: tasks });
   } catch (error) {
     logger.error({ error }, 'Failed to get tasks');
@@ -211,8 +275,17 @@ export async function getTasksByEmployeeController(req: Request, res: Response):
 
 export async function getTaskByIdController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { id } = req.params;
-    const task = await timeTrackingService.getTaskById(id);
+    const task = await timeTrackingService.getTaskById(id, req.companyId);
     
     if (!task) {
       res.status(404).json({
@@ -238,6 +311,15 @@ export async function getTaskByIdController(req: Request, res: Response): Promis
 
 export async function createTaskController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const input = createTaskSchema.parse(req.body);
     const userId = req.user!.userId;
     
@@ -247,6 +329,7 @@ export async function createTaskController(req: Request, res: Response): Promise
       ...input,
       dueDate,
       createdBy: userId,
+      companyId: req.companyId,
     });
     
     res.status(201).json({ data: task });
@@ -274,6 +357,15 @@ export async function createTaskController(req: Request, res: Response): Promise
 
 export async function updateTaskController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { id } = req.params;
     const input = updateTaskSchema.parse(req.body);
     
@@ -281,7 +373,7 @@ export async function updateTaskController(req: Request, res: Response): Promise
       ? (input.dueDate ? new Date(input.dueDate) : null)
       : undefined;
     
-    const task = await timeTrackingService.updateTask(id, {
+    const task = await timeTrackingService.updateTask(id, req.companyId, {
       ...input,
       dueDate,
     });
@@ -321,8 +413,17 @@ export async function updateTaskController(req: Request, res: Response): Promise
 
 export async function deleteTaskController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { id } = req.params;
-    const deleted = await timeTrackingService.deleteTask(id);
+    const deleted = await timeTrackingService.deleteTask(id, req.companyId);
     
     if (!deleted) {
       res.status(404).json({
@@ -351,14 +452,14 @@ export async function deleteTaskController(req: Request, res: Response): Promise
 /**
  * Ensure employee record exists for user (auto-create for HR/Payroll/Admin if missing)
  */
-async function ensureEmployeeRecord(userId: string, userRole: string): Promise<any> {
-  let employee = await orgService.getEmployeeByUserId(userId);
+async function ensureEmployeeRecord(userId: string, userRole: string, companyId: string): Promise<any> {
+  let employee = await orgService.getEmployeeByUserId(userId, companyId);
   
   if (!employee && (userRole === 'hr' || userRole === 'payroll' || userRole === 'admin')) {
     // Get user details including loginId
     const userResult = await query(
-      'SELECT id, name, login_id FROM users WHERE id = $1',
-      [userId]
+      'SELECT id, name, login_id FROM users WHERE id = $1 AND company_id = $2',
+      [userId, companyId]
     );
     
     if (userResult.rows.length === 0) {
@@ -370,9 +471,10 @@ async function ensureEmployeeRecord(userId: string, userRole: string): Promise<a
     const userLoginId = user.login_id;
     
     // Auto-create employee record for HR/Payroll/Admin users
-    // Get HR org unit if exists, otherwise use null
+    // Get HR org unit if exists (filtered by company), otherwise use null
     const hrOrgUnit = await query(
-      "SELECT id FROM org_units WHERE name = 'HR' LIMIT 1"
+      "SELECT id FROM org_units WHERE name = 'HR' AND company_id = $1 LIMIT 1",
+      [companyId]
     );
     
     const orgUnitId = hrOrgUnit.rows.length > 0 ? hrOrgUnit.rows[0].id : null;
@@ -385,12 +487,12 @@ async function ensureEmployeeRecord(userId: string, userRole: string): Promise<a
     else if (userRole === 'payroll') title = 'Payroll Officer';
     else if (userRole === 'admin') title = 'Admin';
     
-    // Create employee record
+    // Create employee record with company_id
     const employeeResult = await query(
-      `INSERT INTO employees (user_id, org_unit_id, code, title, join_date) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING id, user_id, org_unit_id, code, title, join_date, created_at, updated_at`,
-      [userId, orgUnitId, code, title, joinDate]
+      `INSERT INTO employees (user_id, org_unit_id, code, title, join_date, company_id) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
+       RETURNING id, user_id, org_unit_id, code, title, join_date, company_id, created_at, updated_at`,
+      [userId, orgUnitId, code, title, joinDate, companyId]
     );
     
     employee = {
@@ -410,6 +512,15 @@ async function ensureEmployeeRecord(userId: string, userRole: string): Promise<a
 
 export async function getTimeLogsController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const query = timeLogQuerySchema.parse(req.query);
     const user = req.user!;
     
@@ -425,6 +536,7 @@ export async function getTimeLogsController(req: Request, res: Response): Promis
     const viewAll = req.query.viewAll === 'true' || req.query.viewAll === '1';
     
     let employeeId = query.employeeId;
+    let currentEmployee: any = null;
     
     if (!employeeId) {
       // No employeeId specified in query
@@ -436,7 +548,7 @@ export async function getTimeLogsController(req: Request, res: Response): Promis
           // HR/Payroll wants to see all employees - employeeId remains undefined
         } else {
           // HR/Payroll: Default to their own logs - ensure employee record exists
-          const currentEmployee = await ensureEmployeeRecord(user.userId, user.role);
+          currentEmployee = await ensureEmployeeRecord(user.userId, user.role, req.companyId);
           if (currentEmployee) {
             employeeId = currentEmployee.id;
           } else {
@@ -447,7 +559,7 @@ export async function getTimeLogsController(req: Request, res: Response): Promis
         }
       } else {
         // Employee: Default to their own logs
-        const currentEmployee = await orgService.getEmployeeByUserId(user.userId);
+        currentEmployee = await orgService.getEmployeeByUserId(user.userId, req.companyId);
         if (currentEmployee) {
           employeeId = currentEmployee.id;
         } else {
@@ -467,6 +579,9 @@ export async function getTimeLogsController(req: Request, res: Response): Promis
         // No restriction needed - they have access to see all
       } else {
         // Employee: Can only query their own employeeId
+        if (!currentEmployee) {
+          currentEmployee = await orgService.getEmployeeByUserId(user.userId, req.companyId);
+        }
         if (!currentEmployee || currentEmployee.id !== employeeId) {
           throw new AppError('FORBIDDEN', 'You can only view your own time logs', 403);
         }
@@ -476,6 +591,7 @@ export async function getTimeLogsController(req: Request, res: Response): Promis
     const timeLogs = await timeTrackingService.getTimeLogs({
       ...query,
       employeeId,
+      companyId: req.companyId,
     });
     
     res.json({ data: timeLogs });
@@ -513,9 +629,18 @@ export async function getTimeLogsController(req: Request, res: Response): Promis
 
 export async function getTimeLogByIdController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { id } = req.params;
     const user = req.user!;
-    const timeLog = await timeTrackingService.getTimeLogById(id);
+    const timeLog = await timeTrackingService.getTimeLogById(id, req.companyId);
     
     if (!timeLog) {
       res.status(404).json({
@@ -535,7 +660,7 @@ export async function getTimeLogByIdController(req: Request, res: Response): Pro
     
     if (!canSeeAllLogs) {
       // Verify that the time log belongs to the user's employee record
-      const employee = await ensureEmployeeRecord(user.userId, user.role);
+      const employee = await ensureEmployeeRecord(user.userId, user.role, req.companyId);
       if (!employee || employee.id !== timeLog.employeeId) {
         throw new AppError('FORBIDDEN', 'You can only view your own time logs', 403);
       }
@@ -565,11 +690,20 @@ export async function getTimeLogByIdController(req: Request, res: Response): Pro
 
 export async function getActiveTimerController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const userId = req.user!.userId;
     const userRole = req.user!.role;
     
     // Ensure employee record exists (auto-create for HR/Payroll/Admin)
-    const employee = await ensureEmployeeRecord(userId, userRole);
+    const employee = await ensureEmployeeRecord(userId, userRole, req.companyId);
     
     if (!employee) {
       res.status(404).json({
@@ -581,7 +715,7 @@ export async function getActiveTimerController(req: Request, res: Response): Pro
       return;
     }
     
-    const activeTimer = await timeTrackingService.getActiveTimeLog(employee.id);
+    const activeTimer = await timeTrackingService.getActiveTimeLog(employee.id, req.companyId);
     res.json({ data: activeTimer });
   } catch (error) {
     logger.error({ error }, 'Failed to get active timer');
@@ -596,11 +730,20 @@ export async function getActiveTimerController(req: Request, res: Response): Pro
 
 export async function startTimerController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const userId = req.user!.userId;
     const userRole = req.user!.role;
     
     // Ensure employee record exists (auto-create for HR/Payroll/Admin)
-    const employee = await ensureEmployeeRecord(userId, userRole);
+    const employee = await ensureEmployeeRecord(userId, userRole, req.companyId);
     
     if (!employee) {
       res.status(404).json({
@@ -621,6 +764,7 @@ export async function startTimerController(req: Request, res: Response): Promise
       description: input.description || undefined,
       billable: input.billable !== undefined ? input.billable : true,
       userId,
+      companyId: req.companyId,
     });
     
     res.status(201).json({ data: timeLog });
@@ -658,11 +802,20 @@ export async function startTimerController(req: Request, res: Response): Promise
 
 export async function stopTimerController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const userId = req.user!.userId;
     const userRole = req.user!.role;
     
     // Ensure employee record exists (auto-create for HR/Payroll/Admin)
-    const employee = await ensureEmployeeRecord(userId, userRole);
+    const employee = await ensureEmployeeRecord(userId, userRole, req.companyId);
     
     if (!employee) {
       res.status(404).json({
@@ -674,7 +827,7 @@ export async function stopTimerController(req: Request, res: Response): Promise<
       return;
     }
     
-    const timeLog = await timeTrackingService.stopTimer(employee.id, userId);
+    const timeLog = await timeTrackingService.stopTimer(employee.id, userId, req.companyId);
     
     if (!timeLog) {
       res.status(404).json({
@@ -710,11 +863,20 @@ export async function stopTimerController(req: Request, res: Response): Promise<
 
 export async function heartbeatController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const userId = req.user!.userId;
     const userRole = req.user!.role;
     
     // Ensure employee record exists (auto-create for HR/Payroll/Admin)
-    const employee = await ensureEmployeeRecord(userId, userRole);
+    const employee = await ensureEmployeeRecord(userId, userRole, req.companyId);
     
     if (!employee) {
       res.status(404).json({
@@ -729,7 +891,7 @@ export async function heartbeatController(req: Request, res: Response): Promise<
     // Get idleMs from request body (optional, defaults to 0)
     const idleMs = req.body?.idleMs || 0;
     
-    const result = await timeTrackingService.heartbeat(employee.id, userId, idleMs);
+    const result = await timeTrackingService.heartbeat(employee.id, userId, req.companyId, idleMs);
     res.json({ data: result });
   } catch (error) {
     if (error instanceof Error && error.message.includes('No active timer')) {
@@ -754,11 +916,20 @@ export async function heartbeatController(req: Request, res: Response): Promise<
 
 export async function createTimeLogController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const userId = req.user!.userId;
     const userRole = req.user!.role;
     
     // Ensure employee record exists (auto-create for HR/Payroll/Admin)
-    const employee = await ensureEmployeeRecord(userId, userRole);
+    const employee = await ensureEmployeeRecord(userId, userRole, req.companyId);
     
     if (!employee) {
       res.status(404).json({
@@ -791,6 +962,7 @@ export async function createTimeLogController(req: Request, res: Response): Prom
       startTime: new Date(input.startTime),
       endTime: input.endTime ? new Date(input.endTime) : undefined,
       billable: input.billable !== undefined ? input.billable : true,
+      companyId: req.companyId,
     });
     
     res.status(201).json({ data: timeLog });
@@ -818,12 +990,21 @@ export async function createTimeLogController(req: Request, res: Response): Prom
 
 export async function updateTimeLogController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { id } = req.params;
     const user = req.user!;
     const input = updateTimeLogSchema.parse(req.body);
     
     // First, get the time log to check ownership
-    const existingTimeLog = await timeTrackingService.getTimeLogById(id);
+    const existingTimeLog = await timeTrackingService.getTimeLogById(id, req.companyId);
     
     if (!existingTimeLog) {
       res.status(404).json({
@@ -843,13 +1024,13 @@ export async function updateTimeLogController(req: Request, res: Response): Prom
     
     if (!canSeeAllLogs) {
       // Verify that the time log belongs to the user's employee record
-      const employee = await ensureEmployeeRecord(user.userId, user.role);
+      const employee = await ensureEmployeeRecord(user.userId, user.role, req.companyId);
       if (!employee || employee.id !== existingTimeLog.employeeId) {
         throw new AppError('FORBIDDEN', 'You can only update your own time logs', 403);
       }
     }
     
-    const timeLog = await timeTrackingService.updateTimeLog(id, {
+    const timeLog = await timeTrackingService.updateTimeLog(id, req.companyId, {
       taskId: input.taskId,
       projectId: input.projectId,
       description: input.description,
@@ -903,11 +1084,20 @@ export async function updateTimeLogController(req: Request, res: Response): Prom
 
 export async function deleteTimeLogController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { id } = req.params;
     const user = req.user!;
     
     // First, get the time log to check ownership
-    const existingTimeLog = await timeTrackingService.getTimeLogById(id);
+    const existingTimeLog = await timeTrackingService.getTimeLogById(id, req.companyId);
     
     if (!existingTimeLog) {
       res.status(404).json({
@@ -927,13 +1117,13 @@ export async function deleteTimeLogController(req: Request, res: Response): Prom
     
     if (!canSeeAllLogs) {
       // Verify that the time log belongs to the user's employee record
-      const employee = await ensureEmployeeRecord(user.userId, user.role);
+      const employee = await ensureEmployeeRecord(user.userId, user.role, req.companyId);
       if (!employee || employee.id !== existingTimeLog.employeeId) {
         throw new AppError('FORBIDDEN', 'You can only delete your own time logs', 403);
       }
     }
     
-    const deleted = await timeTrackingService.deleteTimeLog(id);
+    const deleted = await timeTrackingService.deleteTimeLog(id, req.companyId);
     
     if (!deleted) {
       res.status(404).json({

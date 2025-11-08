@@ -16,6 +16,8 @@ import timeTrackingRoutes from './modules/time-tracking/time-tracking.routes';
 import usersRoutes from './modules/users/users.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import uploadRoutes from './modules/upload/upload.routes';
+import saasRoutes from './modules/saas/saas.routes';
+import companyRoutes from './modules/company/company.routes';
 import { healthCheck } from './libs/db';
 import { logger } from './config/logger';
 
@@ -49,6 +51,8 @@ app.use((req, res, next) => {
 });
 
 // Routes
+app.use('/api/saas', saasRoutes);
+app.use('/api/company', companyRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/auth/google', googleOAuthRoutes);
 app.use('/api/org', orgRoutes);

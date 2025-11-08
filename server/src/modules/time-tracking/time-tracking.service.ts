@@ -5,15 +5,15 @@ import { logger } from '../../config/logger';
 
 export const timeTrackingService = {
   // Projects
-  async getAllProjects() {
-    return timeTrackingRepo.getAllProjects();
+  async getAllProjects(companyId: string) {
+    return timeTrackingRepo.getAllProjects(companyId);
   },
 
-  async getProjectById(id: string) {
-    return timeTrackingRepo.getProjectById(id);
+  async getProjectById(id: string, companyId: string) {
+    return timeTrackingRepo.getProjectById(id, companyId);
   },
 
-  async createProject(data: { name: string; description?: string; status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD'; createdBy?: string }) {
+  async createProject(data: { name: string; description?: string; status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD'; createdBy?: string; companyId: string }) {
     const project = await timeTrackingRepo.createProject(data);
     
     await notifyChannel('realtime', {
@@ -29,8 +29,8 @@ export const timeTrackingService = {
     return project;
   },
 
-  async updateProject(id: string, data: { name?: string; description?: string; status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' }) {
-    const project = await timeTrackingRepo.updateProject(id, data);
+  async updateProject(id: string, companyId: string, data: { name?: string; description?: string; status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' }) {
+    const project = await timeTrackingRepo.updateProject(id, companyId, data);
     
     if (project) {
       await notifyChannel('realtime', {
@@ -47,8 +47,8 @@ export const timeTrackingService = {
     return project;
   },
 
-  async deleteProject(id: string) {
-    const deleted = await timeTrackingRepo.deleteProject(id);
+  async deleteProject(id: string, companyId: string) {
+    const deleted = await timeTrackingRepo.deleteProject(id, companyId);
     
     if (deleted) {
       await notifyChannel('realtime', {
@@ -62,16 +62,16 @@ export const timeTrackingService = {
   },
 
   // Tasks
-  async getTasksByProject(projectId: string) {
-    return timeTrackingRepo.getTasksByProject(projectId);
+  async getTasksByProject(projectId: string, companyId: string) {
+    return timeTrackingRepo.getTasksByProject(projectId, companyId);
   },
 
-  async getTasksByEmployee(employeeId: string) {
-    return timeTrackingRepo.getTasksByEmployee(employeeId);
+  async getTasksByEmployee(employeeId: string, companyId: string) {
+    return timeTrackingRepo.getTasksByEmployee(employeeId, companyId);
   },
 
-  async getTaskById(id: string) {
-    return timeTrackingRepo.getTaskById(id);
+  async getTaskById(id: string, companyId: string) {
+    return timeTrackingRepo.getTaskById(id, companyId);
   },
 
   async createTask(data: {
@@ -83,6 +83,7 @@ export const timeTrackingService = {
     priority?: 'LOW' | 'MEDIUM' | 'HIGH';
     dueDate?: Date;
     createdBy?: string;
+    companyId: string;
   }) {
     const task = await timeTrackingRepo.createTask(data);
     
@@ -101,7 +102,7 @@ export const timeTrackingService = {
     return task;
   },
 
-  async updateTask(id: string, data: {
+  async updateTask(id: string, companyId: string, data: {
     title?: string;
     description?: string;
     status?: 'TODO' | 'IN_PROGRESS' | 'COMPLETED';
@@ -109,7 +110,7 @@ export const timeTrackingService = {
     dueDate?: Date | null;
     employeeId?: string | null;
   }) {
-    const task = await timeTrackingRepo.updateTask(id, data);
+    const task = await timeTrackingRepo.updateTask(id, companyId, data);
     
     if (task) {
       await notifyChannel('realtime', {
@@ -128,8 +129,8 @@ export const timeTrackingService = {
     return task;
   },
 
-  async deleteTask(id: string) {
-    const deleted = await timeTrackingRepo.deleteTask(id);
+  async deleteTask(id: string, companyId: string) {
+    const deleted = await timeTrackingRepo.deleteTask(id, companyId);
     
     if (deleted) {
       await notifyChannel('realtime', {
@@ -150,16 +151,17 @@ export const timeTrackingService = {
     startDate?: string;
     endDate?: string;
     billable?: boolean;
+    companyId: string;
   }) {
     return timeTrackingRepo.getTimeLogs(filters);
   },
 
-  async getTimeLogById(id: string) {
-    return timeTrackingRepo.getTimeLogById(id);
+  async getTimeLogById(id: string, companyId: string) {
+    return timeTrackingRepo.getTimeLogById(id, companyId);
   },
 
-  async getActiveTimeLog(employeeId: string) {
-    return timeTrackingRepo.getActiveTimeLog(employeeId);
+  async getActiveTimeLog(employeeId: string, companyId: string) {
+    return timeTrackingRepo.getActiveTimeLog(employeeId, companyId);
   },
 
   async startTimer(data: {
@@ -169,9 +171,10 @@ export const timeTrackingService = {
     description?: string;
     billable?: boolean;
     userId: string;
+    companyId: string;
   }) {
     // Check if there's an active timer
-    const activeTimer = await timeTrackingRepo.getActiveTimeLog(data.employeeId);
+    const activeTimer = await timeTrackingRepo.getActiveTimeLog(data.employeeId, data.companyId);
     if (activeTimer) {
       throw new Error('You already have an active timer. Please stop it first.');
     }
@@ -185,6 +188,7 @@ export const timeTrackingService = {
       startTime,
       endTime: null,
       billable: data.billable !== undefined ? data.billable : true,
+      companyId: data.companyId,
     });
     
     // Auto-create/update attendance (punch in)
@@ -210,8 +214,8 @@ export const timeTrackingService = {
     return timeLog;
   },
 
-  async stopTimer(employeeId: string, userId: string) {
-    const activeTimer = await timeTrackingRepo.getActiveTimeLog(employeeId);
+  async stopTimer(employeeId: string, userId: string, companyId: string) {
+    const activeTimer = await timeTrackingRepo.getActiveTimeLog(employeeId, companyId);
     if (!activeTimer) {
       throw new Error('No active timer found.');
     }
@@ -219,7 +223,7 @@ export const timeTrackingService = {
     const endTime = new Date();
     const duration = Math.floor((endTime.getTime() - activeTimer.startTime.getTime()) / 1000);
     
-    const updated = await timeTrackingRepo.updateTimeLog(activeTimer.id, {
+    const updated = await timeTrackingRepo.updateTimeLog(activeTimer.id, companyId, {
       endTime,
     });
     
@@ -247,9 +251,9 @@ export const timeTrackingService = {
     return updated;
   },
 
-  async heartbeat(employeeId: string, userId: string, idleMs: number = 0) {
+  async heartbeat(employeeId: string, userId: string, companyId: string, idleMs: number = 0) {
     // Check if there's an active timer
-    const activeTimer = await timeTrackingRepo.getActiveTimeLog(employeeId);
+    const activeTimer = await timeTrackingRepo.getActiveTimeLog(employeeId, companyId);
     if (!activeTimer) {
       throw new Error('No active timer found.');
     }
@@ -262,13 +266,17 @@ export const timeTrackingService = {
       const minuteStart = new Date(now);
       minuteStart.setSeconds(0, 0);
       
-      // Upsert activity sample
+      // Get employee's company_id
+      const empCheck = await query('SELECT company_id FROM employees WHERE id = $1', [employeeId]);
+      const empCompanyId = empCheck.rows[0]?.company_id || companyId;
+      
+      // Upsert activity sample (company_id is set for tenant isolation)
       await query(
-        `INSERT INTO activity_samples (employee_id, minute_start, idle_ms)
-         VALUES ($1, $2, $3)
+        `INSERT INTO activity_samples (employee_id, minute_start, idle_ms, company_id)
+         VALUES ($1, $2, $3, $4)
          ON CONFLICT (employee_id, minute_start)
          DO UPDATE SET idle_ms = $3, created_at = now()`,
-        [employeeId, minuteStart, Math.max(0, Math.min(60000, idleMs))]
+        [employeeId, minuteStart, Math.max(0, Math.min(60000, idleMs)), empCompanyId]
       );
       
       // Update attendance in_at/out_at from activity samples
@@ -314,6 +322,7 @@ export const timeTrackingService = {
     startTime: Date;
     endTime?: Date;
     billable?: boolean;
+    companyId: string;
   }) {
     const timeLog = await timeTrackingRepo.createTimeLog(data);
     
@@ -334,7 +343,7 @@ export const timeTrackingService = {
     return timeLog;
   },
 
-  async updateTimeLog(id: string, data: {
+  async updateTimeLog(id: string, companyId: string, data: {
     taskId?: string | null;
     projectId?: string | null;
     description?: string | null;
@@ -342,7 +351,7 @@ export const timeTrackingService = {
     endTime?: Date | null;
     billable?: boolean;
   }) {
-    const timeLog = await timeTrackingRepo.updateTimeLog(id, data);
+    const timeLog = await timeTrackingRepo.updateTimeLog(id, companyId, data);
     
     if (timeLog) {
       await notifyChannel('realtime', {
@@ -363,8 +372,8 @@ export const timeTrackingService = {
     return timeLog;
   },
 
-  async deleteTimeLog(id: string) {
-    const deleted = await timeTrackingRepo.deleteTimeLog(id);
+  async deleteTimeLog(id: string, companyId: string) {
+    const deleted = await timeTrackingRepo.deleteTimeLog(id, companyId);
     
     if (deleted) {
       await notifyChannel('realtime', {

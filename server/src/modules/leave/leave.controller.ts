@@ -13,10 +13,20 @@ import { AppError } from '../../middleware/errors';
 
 export async function createLeaveRequestController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
+
     const userId = req.user!.userId;
 
-    // Get employee for this user
-    const employee = await orgService.getEmployeeByUserId(userId);
+    // Get employee for this user (filtered by company)
+    const employee = await orgService.getEmployeeByUserId(userId, req.companyId);
     if (!employee) {
       res.status(404).json({
         error: {
@@ -28,7 +38,7 @@ export async function createLeaveRequestController(req: Request, res: Response):
     }
 
     const data = createLeaveRequestSchema.parse(req.body);
-    const leave = await leaveService.createLeaveRequest(data, employee.id, userId);
+    const leave = await leaveService.createLeaveRequest(data, employee.id, userId, req.companyId);
 
     res.status(201).json({ data: leave });
   } catch (error) {
@@ -57,10 +67,20 @@ export async function createLeaveRequestController(req: Request, res: Response):
 
 export async function getMyLeaveRequestsController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
+
     const userId = req.user!.userId;
 
-    // Get employee for this user
-    const employee = await orgService.getEmployeeByUserId(userId);
+    // Get employee for this user (filtered by company)
+    const employee = await orgService.getEmployeeByUserId(userId, req.companyId);
     if (!employee) {
       res.status(404).json({
         error: {
@@ -71,7 +91,7 @@ export async function getMyLeaveRequestsController(req: Request, res: Response):
       return;
     }
 
-    const leaves = await leaveService.getMyLeaveRequests(employee.id);
+    const leaves = await leaveService.getMyLeaveRequests(employee.id, req.companyId);
     res.json({ data: leaves });
   } catch (error) {
     logger.error({ error }, 'Failed to get leave requests');
@@ -86,7 +106,17 @@ export async function getMyLeaveRequestsController(req: Request, res: Response):
 
 export async function getPendingLeaveRequestsController(req: Request, res: Response): Promise<void> {
   try {
-    const leaves = await leaveService.getPendingLeaveRequests();
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
+
+    const leaves = await leaveService.getPendingLeaveRequests(req.companyId);
     res.json({ data: leaves });
   } catch (error) {
     logger.error({ error }, 'Failed to get pending leave requests');
@@ -101,13 +131,23 @@ export async function getPendingLeaveRequestsController(req: Request, res: Respo
 
 export async function approveLeaveRequestController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
+
     const { id } = req.params;
     const data = approveLeaveSchema.parse({
       ...req.body,
       approverId: req.user!.userId,
     });
 
-    const leave = await leaveService.approveLeaveRequest(id, data);
+    const leave = await leaveService.approveLeaveRequest(id, data, req.companyId);
     res.json({ data: leave });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -134,11 +174,21 @@ export async function approveLeaveRequestController(req: Request, res: Response)
 
 export async function updateLeaveRequestController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
+
     const { id } = req.params;
     const userId = req.user!.userId;
 
-    // Get employee for this user
-    const employee = await orgService.getEmployeeByUserId(userId);
+    // Get employee for this user (filtered by company)
+    const employee = await orgService.getEmployeeByUserId(userId, req.companyId);
     if (!employee) {
       res.status(404).json({
         error: {
@@ -150,7 +200,7 @@ export async function updateLeaveRequestController(req: Request, res: Response):
     }
 
     const data = updateLeaveRequestSchema.parse(req.body);
-    const leave = await leaveService.updateLeaveRequest(id, data, userId, employee.id);
+    const leave = await leaveService.updateLeaveRequest(id, data, userId, employee.id, req.companyId);
 
     res.json({ data: leave });
   } catch (error) {
@@ -189,13 +239,23 @@ export async function updateLeaveRequestController(req: Request, res: Response):
 
 export async function rejectLeaveRequestController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
+
     const { id } = req.params;
     const data = rejectLeaveSchema.parse({
       ...req.body,
       approverId: req.user!.userId,
     });
 
-    const leave = await leaveService.rejectLeaveRequest(id, data);
+    const leave = await leaveService.rejectLeaveRequest(id, data, req.companyId);
     res.json({ data: leave });
   } catch (error) {
     if (error instanceof z.ZodError) {

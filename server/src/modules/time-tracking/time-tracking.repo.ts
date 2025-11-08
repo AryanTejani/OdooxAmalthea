@@ -3,11 +3,13 @@ import { Project, Task, TimeLog, TaskWithProject, TimeLogWithDetails } from './t
 
 // ============= PROJECTS =============
 
-export async function getAllProjects(): Promise<Project[]> {
+export async function getAllProjects(companyId: string): Promise<Project[]> {
   const result = await query(
-    `SELECT id, name, description, status, created_by, created_at, updated_at
+    `SELECT id, name, description, status, created_by, company_id, created_at, updated_at
      FROM projects
-     ORDER BY created_at DESC`
+     WHERE company_id = $1
+     ORDER BY created_at DESC`,
+    [companyId]
   );
   
   return result.rows.map((row) => ({
@@ -21,12 +23,12 @@ export async function getAllProjects(): Promise<Project[]> {
   }));
 }
 
-export async function getProjectById(id: string): Promise<Project | null> {
+export async function getProjectById(id: string, companyId: string): Promise<Project | null> {
   const result = await query(
-    `SELECT id, name, description, status, created_by, created_at, updated_at
+    `SELECT id, name, description, status, created_by, company_id, created_at, updated_at
      FROM projects
-     WHERE id = $1`,
-    [id]
+     WHERE id = $1 AND company_id = $2`,
+    [id, companyId]
   );
   
   if (result.rows.length === 0) {
@@ -50,12 +52,13 @@ export async function createProject(data: {
   description?: string | null;
   status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD';
   createdBy?: string | null;
+  companyId: string;
 }): Promise<Project> {
   const result = await query(
-    `INSERT INTO projects (name, description, status, created_by)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, name, description, status, created_by, created_at, updated_at`,
-    [data.name, data.description || null, data.status || 'ACTIVE', data.createdBy || null]
+    `INSERT INTO projects (name, description, status, created_by, company_id)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, name, description, status, created_by, company_id, created_at, updated_at`,
+    [data.name, data.description || null, data.status || 'ACTIVE', data.createdBy || null, data.companyId]
   );
   
   const row = result.rows[0];
@@ -70,7 +73,7 @@ export async function createProject(data: {
   };
 }
 
-export async function updateProject(id: string, data: {
+export async function updateProject(id: string, companyId: string, data: {
   name?: string;
   description?: string | null;
   status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD';
@@ -93,15 +96,15 @@ export async function updateProject(id: string, data: {
   }
   
   if (updates.length === 0) {
-    return getProjectById(id);
+    return getProjectById(id, companyId);
   }
   
-  values.push(id);
+  values.push(id, companyId);
   const result = await query(
     `UPDATE projects
      SET ${updates.join(', ')}
-     WHERE id = $${paramIndex}
-     RETURNING id, name, description, status, created_by, created_at, updated_at`,
+     WHERE id = $${paramIndex} AND company_id = $${paramIndex + 1}
+     RETURNING id, name, description, status, created_by, company_id, created_at, updated_at`,
     values
   );
   
@@ -121,29 +124,30 @@ export async function updateProject(id: string, data: {
   };
 }
 
-export async function deleteProject(id: string): Promise<boolean> {
+export async function deleteProject(id: string, companyId: string): Promise<boolean> {
   const result = await query(
-    `DELETE FROM projects WHERE id = $1`,
-    [id]
+    `DELETE FROM projects WHERE id = $1 AND company_id = $2`,
+    [id, companyId]
   );
   return result.rowCount !== null && result.rowCount > 0;
 }
 
 // ============= TASKS =============
 
-export async function getTasksByProject(projectId: string): Promise<TaskWithProject[]> {
+export async function getTasksByProject(projectId: string, companyId: string): Promise<TaskWithProject[]> {
   const result = await query(
     `SELECT 
-       t.id, t.project_id, t.employee_id, t.title, t.description, t.status, t.priority, t.due_date, t.created_by, t.created_at, t.updated_at,
+       t.id, t.project_id, t.employee_id, t.title, t.description, t.status, t.priority, t.due_date, t.created_by, t.company_id, t.created_at, t.updated_at,
        p.id as proj_id, p.name as project_name, p.description as project_description, p.status as project_status,
        u.name as employee_name
      FROM tasks t
-     LEFT JOIN projects p ON t.project_id = p.id
-     LEFT JOIN employees e ON t.employee_id = e.id
-     LEFT JOIN users u ON e.user_id = u.id
+     LEFT JOIN projects p ON t.project_id = p.id AND p.company_id = $2
+     LEFT JOIN employees e ON t.employee_id = e.id AND e.company_id = $2
+     LEFT JOIN users u ON e.user_id = u.id AND u.company_id = $2
      WHERE t.project_id = $1
+     AND t.company_id = $2
      ORDER BY t.created_at DESC`,
-    [projectId]
+    [projectId, companyId]
   );
   
   return result.rows.map((row) => ({
@@ -171,16 +175,17 @@ export async function getTasksByProject(projectId: string): Promise<TaskWithProj
   }));
 }
 
-export async function getTasksByEmployee(employeeId: string): Promise<TaskWithProject[]> {
+export async function getTasksByEmployee(employeeId: string, companyId: string): Promise<TaskWithProject[]> {
   const result = await query(
     `SELECT 
-       t.id, t.project_id, t.employee_id, t.title, t.description, t.status, t.priority, t.due_date, t.created_by, t.created_at, t.updated_at,
+       t.id, t.project_id, t.employee_id, t.title, t.description, t.status, t.priority, t.due_date, t.created_by, t.company_id, t.created_at, t.updated_at,
        p.id as proj_id, p.name as project_name, p.description as project_description, p.status as project_status
      FROM tasks t
-     LEFT JOIN projects p ON t.project_id = p.id
+     LEFT JOIN projects p ON t.project_id = p.id AND p.company_id = $2
      WHERE t.employee_id = $1
+     AND t.company_id = $2
      ORDER BY t.created_at DESC`,
-    [employeeId]
+    [employeeId, companyId]
   );
   
   return result.rows.map((row) => ({
@@ -207,18 +212,19 @@ export async function getTasksByEmployee(employeeId: string): Promise<TaskWithPr
   }));
 }
 
-export async function getTaskById(id: string): Promise<TaskWithProject | null> {
+export async function getTaskById(id: string, companyId: string): Promise<TaskWithProject | null> {
   const result = await query(
     `SELECT 
-       t.id, t.project_id, t.employee_id, t.title, t.description, t.status, t.priority, t.due_date, t.created_by, t.created_at, t.updated_at,
+       t.id, t.project_id, t.employee_id, t.title, t.description, t.status, t.priority, t.due_date, t.created_by, t.company_id, t.created_at, t.updated_at,
        p.id as proj_id, p.name as project_name, p.description as project_description, p.status as project_status,
        u.name as employee_name
      FROM tasks t
-     LEFT JOIN projects p ON t.project_id = p.id
-     LEFT JOIN employees e ON t.employee_id = e.id
-     LEFT JOIN users u ON e.user_id = u.id
-     WHERE t.id = $1`,
-    [id]
+     LEFT JOIN projects p ON t.project_id = p.id AND p.company_id = $2
+     LEFT JOIN employees e ON t.employee_id = e.id AND e.company_id = $2
+     LEFT JOIN users u ON e.user_id = u.id AND u.company_id = $2
+     WHERE t.id = $1
+     AND t.company_id = $2`,
+    [id, companyId]
   );
   
   if (result.rows.length === 0) {
@@ -260,11 +266,21 @@ export async function createTask(data: {
   priority?: 'LOW' | 'MEDIUM' | 'HIGH';
   dueDate?: Date | null;
   createdBy?: string | null;
+  companyId: string;
 }): Promise<Task> {
+  // Get company_id from project
+  const projectCheck = await query(
+    'SELECT company_id FROM projects WHERE id = $1 AND company_id = $2',
+    [data.projectId, data.companyId]
+  );
+  if (projectCheck.rows.length === 0) {
+    throw new Error('Project not found or does not belong to this company');
+  }
+
   const result = await query(
-    `INSERT INTO tasks (project_id, employee_id, title, description, status, priority, due_date, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING id, project_id, employee_id, title, description, status, priority, due_date, created_by, created_at, updated_at`,
+    `INSERT INTO tasks (project_id, employee_id, title, description, status, priority, due_date, created_by, company_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING id, project_id, employee_id, title, description, status, priority, due_date, created_by, company_id, created_at, updated_at`,
     [
       data.projectId,
       data.employeeId || null,
@@ -274,6 +290,7 @@ export async function createTask(data: {
       data.priority || 'MEDIUM',
       data.dueDate || null,
       data.createdBy || null,
+      data.companyId,
     ]
   );
   
@@ -293,7 +310,7 @@ export async function createTask(data: {
   };
 }
 
-export async function updateTask(id: string, data: {
+export async function updateTask(id: string, companyId: string, data: {
   title?: string;
   description?: string | null;
   status?: 'TODO' | 'IN_PROGRESS' | 'COMPLETED';
@@ -331,28 +348,15 @@ export async function updateTask(id: string, data: {
   }
   
   if (updates.length === 0) {
-    const task = await getTaskById(id);
-    return task ? {
-      id: task.id,
-      projectId: task.projectId,
-      employeeId: task.employeeId,
-      title: task.title,
-      description: task.description,
-      status: task.status,
-      priority: task.priority,
-      dueDate: task.dueDate,
-      createdBy: task.createdBy,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-    } : null;
+    return getTaskById(id, companyId);
   }
   
-  values.push(id);
+  values.push(id, companyId);
   const result = await query(
     `UPDATE tasks
      SET ${updates.join(', ')}
-     WHERE id = $${paramIndex}
-     RETURNING id, project_id, employee_id, title, description, status, priority, due_date, created_by, created_at, updated_at`,
+     WHERE id = $${paramIndex} AND company_id = $${paramIndex + 1}
+     RETURNING id, project_id, employee_id, title, description, status, priority, due_date, created_by, company_id, created_at, updated_at`,
     values
   );
   
@@ -376,10 +380,10 @@ export async function updateTask(id: string, data: {
   };
 }
 
-export async function deleteTask(id: string): Promise<boolean> {
+export async function deleteTask(id: string, companyId: string): Promise<boolean> {
   const result = await query(
-    `DELETE FROM tasks WHERE id = $1`,
-    [id]
+    `DELETE FROM tasks WHERE id = $1 AND company_id = $2`,
+    [id, companyId]
   );
   return result.rowCount !== null && result.rowCount > 0;
 }
@@ -393,23 +397,24 @@ export async function getTimeLogs(filters: {
   startDate?: string;
   endDate?: string;
   billable?: boolean;
+  companyId: string;
 }): Promise<TimeLogWithDetails[]> {
   let sql = `
     SELECT 
-      tl.id, tl.employee_id, tl.task_id, tl.project_id, tl.description, tl.start_time, tl.end_time, tl.duration, tl.billable, tl.created_at, tl.updated_at,
+      tl.id, tl.employee_id, tl.task_id, tl.project_id, tl.description, tl.start_time, tl.end_time, tl.duration, tl.billable, tl.company_id, tl.created_at, tl.updated_at,
       t.id as task_id_full, t.title as task_title, t.status as task_status,
       p.id as proj_id_full, p.name as project_name,
       u.name as employee_name, e.code as employee_code
     FROM time_logs tl
-    LEFT JOIN tasks t ON tl.task_id = t.id
-    LEFT JOIN projects p ON tl.project_id = p.id
-    LEFT JOIN employees e ON tl.employee_id = e.id
-    LEFT JOIN users u ON e.user_id = u.id
-    WHERE 1=1
+    LEFT JOIN tasks t ON tl.task_id = t.id AND t.company_id = $1
+    LEFT JOIN projects p ON tl.project_id = p.id AND p.company_id = $1
+    LEFT JOIN employees e ON tl.employee_id = e.id AND e.company_id = $1
+    LEFT JOIN users u ON e.user_id = u.id AND u.company_id = $1
+    WHERE tl.company_id = $1
   `;
   
-  const params: any[] = [];
-  let paramIndex = 1;
+  const params: any[] = [filters.companyId];
+  let paramIndex = 2;
   
   if (filters.employeeId) {
     sql += ` AND tl.employee_id = $${paramIndex++}`;
@@ -479,20 +484,21 @@ export async function getTimeLogs(filters: {
   }));
 }
 
-export async function getTimeLogById(id: string): Promise<TimeLogWithDetails | null> {
+export async function getTimeLogById(id: string, companyId: string): Promise<TimeLogWithDetails | null> {
   const result = await query(
     `SELECT 
-      tl.id, tl.employee_id, tl.task_id, tl.project_id, tl.description, tl.start_time, tl.end_time, tl.duration, tl.billable, tl.created_at, tl.updated_at,
+      tl.id, tl.employee_id, tl.task_id, tl.project_id, tl.description, tl.start_time, tl.end_time, tl.duration, tl.billable, tl.company_id, tl.created_at, tl.updated_at,
       t.id as task_id_full, t.title as task_title, t.status as task_status,
       p.id as proj_id_full, p.name as project_name,
       u.name as employee_name, e.code as employee_code
     FROM time_logs tl
-    LEFT JOIN tasks t ON tl.task_id = t.id
-    LEFT JOIN projects p ON tl.project_id = p.id
-    LEFT JOIN employees e ON tl.employee_id = e.id
-    LEFT JOIN users u ON e.user_id = u.id
-    WHERE tl.id = $1`,
-    [id]
+    LEFT JOIN tasks t ON tl.task_id = t.id AND t.company_id = $2
+    LEFT JOIN projects p ON tl.project_id = p.id AND p.company_id = $2
+    LEFT JOIN employees e ON tl.employee_id = e.id AND e.company_id = $2
+    LEFT JOIN users u ON e.user_id = u.id AND u.company_id = $2
+    WHERE tl.id = $1
+    AND tl.company_id = $2`,
+    [id, companyId]
   );
   
   if (result.rows.length === 0) {
@@ -539,15 +545,17 @@ export async function getTimeLogById(id: string): Promise<TimeLogWithDetails | n
   };
 }
 
-export async function getActiveTimeLog(employeeId: string): Promise<TimeLog | null> {
-  // Get the most recent time log that has no end_time (timer is still running)
+export async function getActiveTimeLog(employeeId: string, companyId: string): Promise<TimeLog | null> {
+  // Get the most recent time log that has no end_time (timer is still running) - filtered by company
   const result = await query(
-    `SELECT id, employee_id, task_id, project_id, description, start_time, end_time, duration, billable, created_at, updated_at
+    `SELECT id, employee_id, task_id, project_id, description, start_time, end_time, duration, billable, company_id, created_at, updated_at
      FROM time_logs
-     WHERE employee_id = $1 AND end_time IS NULL
+     WHERE employee_id = $1 
+     AND company_id = $2
+     AND end_time IS NULL
      ORDER BY start_time DESC
      LIMIT 1`,
-    [employeeId]
+    [employeeId, companyId]
   );
   
   if (result.rows.length === 0) {
@@ -578,7 +586,21 @@ export async function createTimeLog(data: {
   startTime: Date;
   endTime?: Date | null;
   billable?: boolean;
+  companyId: string;
 }): Promise<TimeLog> {
+  // Get company_id from employee
+  const empCheck = await query(
+    'SELECT company_id FROM employees WHERE id = $1',
+    [data.employeeId]
+  );
+  if (empCheck.rows.length === 0) {
+    throw new Error('Employee not found');
+  }
+  const companyId = empCheck.rows[0].company_id || data.companyId;
+  if (!companyId) {
+    throw new Error('Employee has no company_id');
+  }
+
   // Calculate duration if endTime is provided
   let duration: number | null = null;
   if (data.endTime) {
@@ -586,9 +608,9 @@ export async function createTimeLog(data: {
   }
   
   const result = await query(
-    `INSERT INTO time_logs (employee_id, task_id, project_id, description, start_time, end_time, duration, billable)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING id, employee_id, task_id, project_id, description, start_time, end_time, duration, billable, created_at, updated_at`,
+    `INSERT INTO time_logs (employee_id, task_id, project_id, description, start_time, end_time, duration, billable, company_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING id, employee_id, task_id, project_id, description, start_time, end_time, duration, billable, company_id, created_at, updated_at`,
     [
       data.employeeId,
       data.taskId || null,
@@ -598,6 +620,7 @@ export async function createTimeLog(data: {
       data.endTime || null,
       duration,
       data.billable !== undefined ? data.billable : true,
+      companyId,
     ]
   );
   
@@ -617,7 +640,7 @@ export async function createTimeLog(data: {
   };
 }
 
-export async function updateTimeLog(id: string, data: {
+export async function updateTimeLog(id: string, companyId: string, data: {
   taskId?: string | null;
   projectId?: string | null;
   description?: string | null;
@@ -629,7 +652,7 @@ export async function updateTimeLog(id: string, data: {
   let duration: number | null = null;
   if (data.endTime !== undefined) {
     // Get current startTime if not updating it
-    const current = await getTimeLogById(id);
+    const current = await getTimeLogById(id, companyId);
     if (current) {
       const startTime = data.startTime || current.startTime;
       if (data.endTime) {
@@ -676,28 +699,15 @@ export async function updateTimeLog(id: string, data: {
   }
   
   if (updates.length === 0) {
-    const log = await getTimeLogById(id);
-    return log ? {
-      id: log.id,
-      employeeId: log.employeeId,
-      taskId: log.taskId,
-      projectId: log.projectId,
-      description: log.description,
-      startTime: log.startTime,
-      endTime: log.endTime,
-      duration: log.duration,
-      billable: log.billable,
-      createdAt: log.createdAt,
-      updatedAt: log.updatedAt,
-    } : null;
+    return getTimeLogById(id, companyId);
   }
   
-  values.push(id);
+  values.push(id, companyId);
   const result = await query(
     `UPDATE time_logs
      SET ${updates.join(', ')}
-     WHERE id = $${paramIndex}
-     RETURNING id, employee_id, task_id, project_id, description, start_time, end_time, duration, billable, created_at, updated_at`,
+     WHERE id = $${paramIndex} AND company_id = $${paramIndex + 1}
+     RETURNING id, employee_id, task_id, project_id, description, start_time, end_time, duration, billable, company_id, created_at, updated_at`,
     values
   );
   
@@ -721,10 +731,10 @@ export async function updateTimeLog(id: string, data: {
   };
 }
 
-export async function deleteTimeLog(id: string): Promise<boolean> {
+export async function deleteTimeLog(id: string, companyId: string): Promise<boolean> {
   const result = await query(
-    `DELETE FROM time_logs WHERE id = $1`,
-    [id]
+    `DELETE FROM time_logs WHERE id = $1 AND company_id = $2`,
+    [id, companyId]
   );
   return result.rowCount !== null && result.rowCount > 0;
 }

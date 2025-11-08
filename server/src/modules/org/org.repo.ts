@@ -23,14 +23,16 @@ export interface EmployeeWithRelations extends Employee {
 }
 
 /**
- * Get all org units with parent, children, and employee count
+ * Get all org units with parent, children, and employee count (filtered by company)
  */
-export async function getOrgUnits(): Promise<OrgUnitWithRelations[]> {
-  // Get all org units
+export async function getOrgUnits(companyId: string): Promise<OrgUnitWithRelations[]> {
+  // Get all org units for this company
   const result = await query(
-    `SELECT id, name, parent_id, created_at, updated_at 
+    `SELECT id, name, parent_id, company_id, created_at, updated_at 
      FROM org_units 
-     ORDER BY name ASC`
+     WHERE company_id = $1
+     ORDER BY name ASC`,
+    [companyId]
   );
   
   const orgUnits = result.rows.map((row) => ({
@@ -61,12 +63,14 @@ export async function getOrgUnits(): Promise<OrgUnitWithRelations[]> {
     }
   }
   
-  // Get employee counts
+  // Get employee counts (filtered by company)
   const employeeCounts = await query(
     `SELECT org_unit_id, COUNT(*) as count 
      FROM employees 
      WHERE org_unit_id IS NOT NULL 
-     GROUP BY org_unit_id`
+     AND company_id = $1
+     GROUP BY org_unit_id`,
+    [companyId]
   );
   
   const countMap = new Map<string, number>();
@@ -88,12 +92,12 @@ export async function getOrgUnits(): Promise<OrgUnitWithRelations[]> {
 /**
  * Create org unit
  */
-export async function createOrgUnit(data: CreateOrgUnitInput): Promise<OrgUnitWithRelations> {
+export async function createOrgUnit(data: CreateOrgUnitInput & { companyId: string }): Promise<OrgUnitWithRelations> {
   const result = await query(
-    `INSERT INTO org_units (name, parent_id) 
-     VALUES ($1, $2) 
-     RETURNING id, name, parent_id, created_at, updated_at`,
-    [data.name, data.parentId || null]
+    `INSERT INTO org_units (name, parent_id, company_id) 
+     VALUES ($1, $2, $3) 
+     RETURNING id, name, parent_id, company_id, created_at, updated_at`,
+    [data.name, data.parentId || null, data.companyId]
   );
   
   const row = result.rows[0];
@@ -105,12 +109,12 @@ export async function createOrgUnit(data: CreateOrgUnitInput): Promise<OrgUnitWi
     updatedAt: row.updated_at,
   };
   
-  // Get parent if exists
+  // Get parent if exists (must be in same company)
   let parent: OrgUnit | null = null;
   if (orgUnit.parentId) {
     const parentResult = await query(
-      'SELECT id, name, parent_id, created_at, updated_at FROM org_units WHERE id = $1',
-      [orgUnit.parentId]
+      'SELECT id, name, parent_id, company_id, created_at, updated_at FROM org_units WHERE id = $1 AND company_id = $2',
+      [orgUnit.parentId, data.companyId]
     );
     if (parentResult.rows.length > 0) {
       const parentRow = parentResult.rows[0];
@@ -124,10 +128,10 @@ export async function createOrgUnit(data: CreateOrgUnitInput): Promise<OrgUnitWi
     }
   }
   
-  // Get children
+  // Get children (same company)
   const childrenResult = await query(
-    'SELECT id, name, parent_id, created_at, updated_at FROM org_units WHERE parent_id = $1',
-    [orgUnit.id]
+    'SELECT id, name, parent_id, company_id, created_at, updated_at FROM org_units WHERE parent_id = $1 AND company_id = $2',
+    [orgUnit.id, data.companyId]
   );
   const children = childrenResult.rows.map((childRow) => ({
     id: childRow.id,
@@ -145,12 +149,12 @@ export async function createOrgUnit(data: CreateOrgUnitInput): Promise<OrgUnitWi
 }
 
 /**
- * Get org unit by ID with relations
+ * Get org unit by ID with relations (filtered by company)
  */
-export async function getOrgUnitById(id: string): Promise<OrgUnitWithEmployees | null> {
+export async function getOrgUnitById(id: string, companyId: string): Promise<OrgUnitWithEmployees | null> {
   const result = await query(
-    'SELECT id, name, parent_id, created_at, updated_at FROM org_units WHERE id = $1',
-    [id]
+    'SELECT id, name, parent_id, company_id, created_at, updated_at FROM org_units WHERE id = $1 AND company_id = $2',
+    [id, companyId]
   );
   
   if (result.rows.length === 0) {
@@ -166,12 +170,12 @@ export async function getOrgUnitById(id: string): Promise<OrgUnitWithEmployees |
     updatedAt: row.updated_at,
   };
   
-  // Get parent
+  // Get parent (same company)
   let parent: OrgUnit | null = null;
   if (orgUnit.parentId) {
     const parentResult = await query(
-      'SELECT id, name, parent_id, created_at, updated_at FROM org_units WHERE id = $1',
-      [orgUnit.parentId]
+      'SELECT id, name, parent_id, company_id, created_at, updated_at FROM org_units WHERE id = $1 AND company_id = $2',
+      [orgUnit.parentId, companyId]
     );
     if (parentResult.rows.length > 0) {
       const parentRow = parentResult.rows[0];
@@ -185,10 +189,10 @@ export async function getOrgUnitById(id: string): Promise<OrgUnitWithEmployees |
     }
   }
   
-  // Get children
+  // Get children (same company)
   const childrenResult = await query(
-    'SELECT id, name, parent_id, created_at, updated_at FROM org_units WHERE parent_id = $1',
-    [id]
+    'SELECT id, name, parent_id, company_id, created_at, updated_at FROM org_units WHERE parent_id = $1 AND company_id = $2',
+    [id, companyId]
   );
   const children = childrenResult.rows.map((childRow) => ({
     id: childRow.id,
@@ -198,13 +202,14 @@ export async function getOrgUnitById(id: string): Promise<OrgUnitWithEmployees |
     updatedAt: childRow.updated_at,
   }));
   
-  // Get employees
+  // Get employees (same company)
   const employeesResult = await query(
-    `SELECT e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at
+    `SELECT e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.company_id, e.created_at, e.updated_at
      FROM employees e
      WHERE e.org_unit_id = $1
+     AND e.company_id = $2
      ORDER BY e.code ASC`,
-    [id]
+    [id, companyId]
   );
   const employees = employeesResult.rows.map((empRow) => ({
     id: empRow.id,
@@ -226,18 +231,19 @@ export async function getOrgUnitById(id: string): Promise<OrgUnitWithEmployees |
 }
 
 /**
- * Get employee by user ID with relations
+ * Get employee by user ID with relations (filtered by company)
  */
-export async function getEmployeeByUserId(userId: string): Promise<EmployeeWithRelations | null> {
+export async function getEmployeeByUserId(userId: string, companyId: string): Promise<EmployeeWithRelations | null> {
   const result = await query(
-    `SELECT e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+    `SELECT e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.company_id, e.created_at, e.updated_at,
             o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at,
             s.id as salary_id, s.employee_id as salary_employee_id, s.basic, s.allowances, s.created_at as salary_created_at, s.updated_at as salary_updated_at
      FROM employees e
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     LEFT JOIN salary_config s ON e.id = s.employee_id
-     WHERE e.user_id = $1`,
-    [userId]
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     LEFT JOIN salary_config s ON e.id = s.employee_id AND s.company_id = $2
+     WHERE e.user_id = $1
+     AND e.company_id = $2`,
+    [userId, companyId]
   );
   
   if (result.rows.length === 0) {
@@ -291,16 +297,17 @@ export async function createEmployee(data: {
   code: string;
   title: string | null;
   joinDate: Date;
+  companyId: string;
   salaryConfig?: {
     basic: number;
     allowances: Record<string, unknown>;
   } | null;
 }): Promise<EmployeeWithRelations> {
   const employeeResult = await query(
-    `INSERT INTO employees (user_id, org_unit_id, code, title, join_date) 
-     VALUES ($1, $2, $3, $4, $5) 
-     RETURNING id, user_id, org_unit_id, code, title, join_date, created_at, updated_at`,
-    [data.userId, data.orgUnitId, data.code, data.title, data.joinDate]
+    `INSERT INTO employees (user_id, org_unit_id, code, title, join_date, company_id) 
+     VALUES ($1, $2, $3, $4, $5, $6) 
+     RETURNING id, user_id, org_unit_id, code, title, join_date, company_id, created_at, updated_at`,
+    [data.userId, data.orgUnitId, data.code, data.title, data.joinDate, data.companyId]
   );
   
   const empRow = employeeResult.rows[0];
@@ -315,12 +322,12 @@ export async function createEmployee(data: {
     updatedAt: empRow.updated_at,
   };
   
-  // Create salary config if provided
+  // Create salary config if provided (include company_id)
   if (data.salaryConfig) {
     await query(
-      `INSERT INTO salary_config (employee_id, basic, allowances) 
-       VALUES ($1, $2, $3)`,
-      [employee.id, data.salaryConfig.basic, JSON.stringify(data.salaryConfig.allowances || {})]
+      `INSERT INTO salary_config (employee_id, company_id, basic, allowances) 
+       VALUES ($1, $2, $3, $4)`,
+      [employee.id, data.companyId, data.salaryConfig.basic, JSON.stringify(data.salaryConfig.allowances || {})]
     );
   }
   
@@ -328,19 +335,20 @@ export async function createEmployee(data: {
 }
 
 /**
- * Get employees by org unit
+ * Get employees by org unit (filtered by company)
  */
-export async function getEmployeesByOrgUnit(orgUnitId: string): Promise<EmployeeWithRelations[]> {
+export async function getEmployeesByOrgUnit(orgUnitId: string, companyId: string): Promise<EmployeeWithRelations[]> {
   const result = await query(
-    `SELECT e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+    `SELECT e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.company_id, e.created_at, e.updated_at,
             o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at,
             s.id as salary_id, s.employee_id as salary_employee_id, s.basic, s.allowances, s.created_at as salary_created_at, s.updated_at as salary_updated_at
      FROM employees e
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     LEFT JOIN salary_config s ON e.id = s.employee_id
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     LEFT JOIN salary_config s ON e.id = s.employee_id AND s.company_id = $2
      WHERE e.org_unit_id = $1
+     AND e.company_id = $2
      ORDER BY e.code ASC`,
-    [orgUnitId]
+    [orgUnitId, companyId]
   );
   
   return result.rows.map((row) => {
@@ -383,17 +391,19 @@ export async function getEmployeesByOrgUnit(orgUnitId: string): Promise<Employee
 }
 
 /**
- * Get all employees with relations (for employee directory)
+ * Get all employees with relations (for employee directory, filtered by company)
  */
-export async function getAllEmployees(): Promise<EmployeeWithRelations[]> {
+export async function getAllEmployees(companyId: string): Promise<EmployeeWithRelations[]> {
   const result = await query(
-    `SELECT e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+    `SELECT e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.company_id, e.created_at, e.updated_at,
             u.name as user_name, u.email as user_email, u.login_id as user_login_id,
             o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM employees e
-     INNER JOIN users u ON e.user_id = u.id
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     ORDER BY e.code ASC`
+     INNER JOIN users u ON e.user_id = u.id AND u.company_id = $1
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $1
+     WHERE e.company_id = $1
+     ORDER BY e.code ASC`,
+    [companyId]
   );
   
   return result.rows.map((row) => {
@@ -429,13 +439,13 @@ export async function getAllEmployees(): Promise<EmployeeWithRelations[]> {
 }
 
 /**
- * Get employees grid with current status (present/absent/leave)
+ * Get employees grid with current status (present/absent/leave) - filtered by company
  */
-export async function getEmployeesGrid(search?: string): Promise<any[]> {
+export async function getEmployeesGrid(companyId: string, search?: string): Promise<any[]> {
   // Use PostgreSQL's CURRENT_DATE for consistent date handling (server timezone)
   let sql = `
     SELECT DISTINCT ON (e.id)
-      e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+      e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.company_id, e.created_at, e.updated_at,
       u.name as user_name, u.email as user_email,
       o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at,
       a.id as attendance_id, a.status as attendance_status, a.in_at, a.out_at, a.updated_at as attendance_updated_at,
@@ -444,6 +454,7 @@ export async function getEmployeesGrid(search?: string): Promise<any[]> {
         WHEN EXISTS (
           SELECT 1 FROM leave_requests l 
           WHERE l.employee_id = e.id 
+          AND l.company_id = $1
           AND l.status IN ('APPROVED', 'PENDING')
           AND l.start_date <= CURRENT_DATE
           AND l.end_date >= CURRENT_DATE
@@ -453,21 +464,22 @@ export async function getEmployeesGrid(search?: string): Promise<any[]> {
         ELSE 'absent'
       END as status
     FROM employees e
-    INNER JOIN users u ON e.user_id = u.id
-    LEFT JOIN org_units o ON e.org_unit_id = o.id
-    LEFT JOIN attendance a ON e.id = a.employee_id AND a.day = CURRENT_DATE
+    INNER JOIN users u ON e.user_id = u.id AND u.company_id = $1
+    LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $1
+    LEFT JOIN attendance a ON e.id = a.employee_id AND a.company_id = $1 AND a.day = CURRENT_DATE
     LEFT JOIN LATERAL (
       SELECT id, start_time 
       FROM time_logs 
       WHERE employee_id = e.id 
+        AND company_id = $1
         AND end_time IS NULL 
       ORDER BY start_time DESC 
       LIMIT 1
     ) tl ON true
-    WHERE 1=1
+    WHERE e.company_id = $1
   `;
   
-  const params: any[] = [];
+  const params: any[] = [companyId];
   
   if (search) {
     sql += ` AND (u.name ILIKE $${params.length + 1} OR u.email ILIKE $${params.length + 1} OR e.code ILIKE $${params.length + 1})`;

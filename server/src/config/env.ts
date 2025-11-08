@@ -24,6 +24,11 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
+  // Email configuration (Gmail SMTP)
+  EMAIL_USER: z.string().email().optional(),
+  EMAIL_PASSWORD: z.string().optional(),
+  APP_NAME: z.string().default('WorkZen'),
+  APP_URL: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

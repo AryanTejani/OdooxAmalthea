@@ -2,7 +2,7 @@ import { query } from '../../libs/db';
 import { Activity } from '../../domain/types';
 
 /**
- * Create activity record
+ * Create activity record (sets company_id from actorId's user)
  */
 export async function createActivity(data: {
   entity: string;
@@ -11,16 +11,29 @@ export async function createActivity(data: {
   action: string;
   meta: Record<string, unknown>;
 }): Promise<Activity> {
+  // Get company_id from actor's user
+  let companyId: string | null = null;
+  if (data.actorId) {
+    const userResult = await query(
+      'SELECT company_id FROM users WHERE id = $1',
+      [data.actorId]
+    );
+    if (userResult.rows.length > 0) {
+      companyId = userResult.rows[0].company_id;
+    }
+  }
+
   const result = await query(
-    `INSERT INTO activity (entity, ref_id, actor_id, action, meta) 
-     VALUES ($1, $2, $3, $4, $5) 
-     RETURNING id, entity, ref_id, actor_id, action, meta, created_at`,
+    `INSERT INTO activity (entity, ref_id, actor_id, action, meta, company_id) 
+     VALUES ($1, $2, $3, $4, $5, $6) 
+     RETURNING id, entity, ref_id, actor_id, action, meta, company_id, created_at`,
     [
       data.entity,
       data.refId,
       data.actorId || null,
       data.action,
       JSON.stringify(data.meta || {}),
+      companyId,
     ]
   );
   
@@ -37,14 +50,14 @@ export async function createActivity(data: {
 }
 
 /**
- * Get latest activities
+ * Get latest activities (filtered by company)
  */
-export async function getLatestActivities(limit: number = 50, entity?: string): Promise<Activity[]> {
-  let sql = 'SELECT id, entity, ref_id, actor_id, action, meta, created_at FROM activity';
-  const params: any[] = [];
+export async function getLatestActivities(companyId: string, limit: number = 50, entity?: string): Promise<Activity[]> {
+  let sql = 'SELECT id, entity, ref_id, actor_id, action, meta, company_id, created_at FROM activity WHERE company_id = $1';
+  const params: any[] = [companyId];
   
   if (entity) {
-    sql += ' WHERE entity = $1';
+    sql += ` AND entity = $${params.length + 1}`;
     params.push(entity);
   }
   
@@ -65,15 +78,15 @@ export async function getLatestActivities(limit: number = 50, entity?: string): 
 }
 
 /**
- * Get activities by entity and ref ID
+ * Get activities by entity and ref ID (filtered by company)
  */
-export async function getActivitiesByEntity(entity: string, refId: string): Promise<Activity[]> {
+export async function getActivitiesByEntity(entity: string, refId: string, companyId: string): Promise<Activity[]> {
   const result = await query(
-    `SELECT id, entity, ref_id, actor_id, action, meta, created_at 
+    `SELECT id, entity, ref_id, actor_id, action, meta, company_id, created_at 
      FROM activity 
-     WHERE entity = $1 AND ref_id = $2 
+     WHERE entity = $1 AND ref_id = $2 AND company_id = $3
      ORDER BY created_at DESC`,
-    [entity, refId]
+    [entity, refId, companyId]
   );
   
   return result.rows.map((row) => ({

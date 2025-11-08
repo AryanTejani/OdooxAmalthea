@@ -183,6 +183,68 @@ export const authApi = {
   },
 };
 
+// SaaS API methods
+export interface Company {
+  id: string;
+  name: string;
+  code: string;
+  logoUrl: string | null;
+}
+
+export interface SaasSignupInput {
+  companyName: string;
+  companyCode?: string;
+  adminName: string;
+  adminEmail: string;
+  password: string;
+}
+
+export interface SaasLoginInput {
+  companyCode: string;
+  login: string;
+  password: string;
+}
+
+export interface SaasSignupResponse {
+  company: Company;
+  admin: {
+    id: string;
+    email: string;
+    loginId: string;
+  };
+}
+
+export interface SaasLoginResponse {
+  user: User;
+  company: Company;
+  mustChangePassword: boolean;
+}
+
+export const saasApi = {
+  signup: async (data: SaasSignupInput): Promise<SaasSignupResponse> => {
+    const response = await api.post<SaasSignupResponse>('/api/saas/signup', data);
+    return response.data;
+  },
+
+  login: async (data: SaasLoginInput): Promise<SaasLoginResponse> => {
+    const response = await api.post<SaasLoginResponse>('/api/saas/login', data);
+    return response.data;
+  },
+};
+
+// Company API methods
+export const companyApi = {
+  getMe: async (): Promise<Company> => {
+    const response = await api.get<{ company: Company }>('/api/company/me');
+    return response.data.company;
+  },
+
+  update: async (data: { name?: string; logoUrl?: string | null }): Promise<Company> => {
+    const response = await api.patch<{ company: Company }>('/api/company', data);
+    return response.data.company;
+  },
+};
+
 // HRMS Types
 export interface OrgUnit {
   id: string;
@@ -294,15 +356,17 @@ export const hrmsApi = {
     lastName: string;
     email: string;
     phone?: string;
-    companyName: string;
+    companyName?: string;
+    role?: 'admin' | 'hr' | 'payroll' | 'employee';
     orgUnitId?: string;
     title?: string;
     joinDate: string;
     salaryConfig?: { basic: number; allowances?: Record<string, number> };
-  }): Promise<{ employee: Employee; credentials: { loginId: string; tempPassword: string } }> => {
-    const response = await api.post<{ data: Employee; credentials: { loginId: string; tempPassword: string } }>('/api/org/employees', data);
+  }): Promise<{ employee?: Employee; user?: any; credentials: { loginId: string; tempPassword: string } }> => {
+    const response = await api.post<{ data: Employee | any; credentials: { loginId: string; tempPassword: string } }>('/api/org/employees', data);
     return {
-      employee: response.data.data,
+      employee: response.data.data?.id ? response.data.data : undefined,
+      user: response.data.data,
       credentials: response.data.credentials,
     };
   },

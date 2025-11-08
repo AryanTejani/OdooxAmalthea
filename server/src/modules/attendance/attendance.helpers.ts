@@ -113,12 +113,13 @@ export function isPayableDay(
     return false;
   }
   
-  // If active hours < minimum, not payable (absent)
-  if (activeHours < minActiveHours) {
-    return false;
+  // Paid leave (CASUAL, SICK) is always payable, regardless of work hours
+  if (leaveType === 'CASUAL' || leaveType === 'SICK') {
+    return true;
   }
   
-  // Paid leave (CASUAL, SICK) or present day is payable
-  return true;
+  // If no leave: only payable if active hours >= minimum (present day)
+  // If active hours < minimum, not payable (absent)
+  return activeHours >= minActiveHours;
 }
 

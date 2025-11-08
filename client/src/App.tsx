@@ -2,12 +2,15 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { AuthProvider } from '@/auth/AuthContext';
+import { BrandProvider } from '@/context/BrandContext';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { RoleProtectedRoute } from '@/auth/RoleProtectedRoute';
 import { HRMSLayout } from '@/components/hrms/HRMSLayout';
 import { queryClient } from '@/lib/queryClient';
 import { Login } from '@/pages/Login';
 import { Register } from '@/pages/Register';
+import { SaasSignup } from '@/pages/saas/Signup';
+import { SaasLogin } from '@/pages/saas/Login';
 import { Profile } from '@/pages/hrms/Profile';
 import { FirstLogin } from '@/pages/FirstLogin';
 import { Landing } from '@/pages/hrms/Landing';
@@ -29,17 +32,20 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Landing />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+          <BrandProvider>
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Landing />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/saas/signup" element={<SaasSignup />} />
+              <Route path="/saas/login" element={<SaasLogin />} />
             <Route
               path="/first-login"
               element={
@@ -181,6 +187,7 @@ function App() {
             <Route path="*" element={<Navigate to="/hrms/dashboard" replace />} />
           </Routes>
           <Toaster position="top-right" richColors />
+          </BrandProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

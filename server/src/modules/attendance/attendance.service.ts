@@ -1,10 +1,16 @@
 import { attendanceRepo } from './attendance.repo';
-import { orgRepo } from '../org/org.repo';
 import { activityRepo } from '../activity/activity.repo';
 import { notifyChannel } from '../../libs/pg';
 import { logger } from '../../config/logger';
 
+/**
+ * Attendance service - Internal use only
+ * Used by time-tracking service to auto-create/update attendance records
+ */
 export const attendanceService = {
+  /**
+   * Punch in - called internally by time-tracking service when timer starts
+   */
   async punchIn(employeeId: string, userId: string, inAt?: Date) {
     const punchTime = inAt || new Date();
 
@@ -43,6 +49,9 @@ export const attendanceService = {
     return record;
   },
 
+  /**
+   * Punch out - called internally by time-tracking service when timer stops
+   */
   async punchOut(employeeId: string, userId: string, outAt?: Date) {
     const punchTime = outAt || new Date();
 
@@ -78,48 +87,6 @@ export const attendanceService = {
     });
 
     return record;
-  },
-
-  async getMyAttendance(employeeId: string, month?: string) {
-    if (month) {
-      return attendanceRepo.getByEmployeeIdAndMonth(employeeId, month);
-    }
-
-    // Default to current month
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    return attendanceRepo.getByEmployeeIdAndMonth(employeeId, currentMonth);
-  },
-
-  async getTeamBoard(day: string, orgUnitId?: string) {
-    const records = await attendanceRepo.getBoardByDay(day, orgUnitId);
-
-    // Fetch user details for all employees
-    const employeeIds = [...new Set(records.map((r) => r.employee?.userId).filter(Boolean))];
-    if (employeeIds.length === 0) {
-      return [];
-    }
-    
-    const { query } = await import('../../libs/db');
-    const placeholders = employeeIds.map((_, i) => `$${i + 1}`).join(',');
-    const usersResult = await query(
-      `SELECT id, name FROM users WHERE id IN (${placeholders})`,
-      employeeIds as string[]
-    );
-    const users = usersResult.rows;
-
-    const userMap = new Map(users.map((u) => [u.id, u.name]));
-
-    // Map to board format
-    return records.map((record) => ({
-      employeeId: record.employee.id,
-      employeeCode: record.employee.code,
-      employeeName: userMap.get(record.employee.userId) || '',
-      orgUnitName: record.employee.orgUnit?.name || null,
-      inAt: record.inAt?.toISOString() || null,
-      outAt: record.outAt?.toISOString() || null,
-      status: record.status,
-    }));
   },
 };
 

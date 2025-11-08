@@ -2,11 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, AccessTokenPayload } from '../utils/jwt';
 import { logger } from '../config/logger';
 
-// Extend Express Request to include user
+// Extend Express Request to include user and companyId
 declare global {
   namespace Express {
     interface Request {
       user?: AccessTokenPayload;
+      companyId?: string;
     }
   }
 }
@@ -30,8 +31,13 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
     const payload = verifyAccessToken(accessToken);
     req.user = payload;
+    
+    // Set companyId from token for convenience (can also be accessed via req.user.companyId)
+    if (payload.companyId) {
+      req.companyId = payload.companyId;
+    }
 
-    logger.debug({ userId: payload.userId }, 'User authenticated');
+    logger.debug({ userId: payload.userId, companyId: payload.companyId }, 'User authenticated');
     next();
   } catch (error) {
     if (error instanceof Error) {

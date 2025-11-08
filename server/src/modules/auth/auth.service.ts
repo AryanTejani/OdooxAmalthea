@@ -58,14 +58,39 @@ export async function register(
 
 /**
  * Login user (supports email or login_id)
+ * Legacy route: infers company if unique, otherwise requires company code via SaaS login
  */
 export async function login(
   input: LoginInput,
   userAgent: string,
   ip: string
 ): Promise<AuthResult & { mustChangePassword: boolean }> {
-  // Find user by email or login_id
-  const user = await findUserByEmailOrLoginId(input.login);
+  // Check if login exists in multiple companies
+  const emailUsers = await query(
+    'SELECT id, company_id FROM users WHERE email = $1',
+    [input.login.toLowerCase()]
+  );
+  const loginIdUsers = await query(
+    'SELECT id, company_id FROM users WHERE login_id = $1',
+    [input.login.toUpperCase()]
+  );
+  
+  const allMatches = [...emailUsers.rows, ...loginIdUsers.rows];
+  const uniqueCompanyIds = new Set(allMatches.map((row: any) => row.company_id).filter(Boolean));
+  
+  // If login exists in multiple companies, require company code via SaaS login
+  if (uniqueCompanyIds.size > 1) {
+    throw new AppError(
+      'MULTIPLE_COMPANIES',
+      'This login exists in multiple companies. Please use the company login page with your company code.',
+      400
+    );
+  }
+  
+  // Find user by email or login_id (if unique company, this will find it)
+  // If no companyId in the set, try without company filter (for backward compatibility)
+  const companyId = uniqueCompanyIds.size === 1 ? Array.from(uniqueCompanyIds)[0] as string : undefined;
+  const user = await findUserByEmailOrLoginId(input.login, companyId);
   
   // Generic error to prevent enumeration
   if (!user || !user.passwordHash) {
@@ -78,7 +103,7 @@ export async function login(
     throw new AppError('INVALID_CREDENTIALS', 'Invalid login ID/email or password', 401);
   }
 
-  logger.info({ userId: user.id, email: user.email, loginId: user.loginId }, 'User logged in');
+  logger.info({ userId: user.id, email: user.email, loginId: user.loginId, companyId: user.companyId }, 'User logged in');
 
   // Create session
   const { accessToken, refreshToken } = await createSession(user, userAgent, ip);
@@ -169,7 +194,13 @@ async function createSession(
   });
 
   // Sign tokens with actual session ID
-  const accessToken = signAccessToken(user);
+  const accessToken = signAccessToken({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    companyId: user.companyId,
+  });
   const refreshToken = signRefreshToken(session.id, jti);
 
   // Hash the final refresh token and update session
@@ -248,7 +279,13 @@ export async function refresh(
   await revokeSessionRepo(session.id);
   
   // Sign new access token
-  const accessToken = signAccessToken(session.user);
+  const accessToken = signAccessToken({
+    id: session.user.id,
+    email: session.user.email,
+    name: session.user.name,
+    role: session.user.role,
+    companyId: session.user.companyId,
+  });
   
   const tokens = { accessToken, refreshToken: newRefreshToken };
 
@@ -275,18 +312,24 @@ export async function logout(sessionId: string): Promise<void> {
 /**
  * Get current user with employee info
  */
-export async function getMe(userId: string): Promise<UserWithoutPassword & { employee?: any }> {
+export async function getMe(userId: string, companyId?: string): Promise<UserWithoutPassword & { employee?: any }> {
   const user = await getUserWithoutPassword(userId);
   if (!user) {
     throw new AppError('USER_NOT_FOUND', 'User not found', 404);
   }
 
-  // Get employee info if exists
-  const employee = await getEmployeeByUserId(userId);
+  // Get employee info if exists (filtered by company)
+  if (companyId) {
+    const employee = await getEmployeeByUserId(userId, companyId);
+    return {
+      ...user,
+      employee: employee || undefined,
+    };
+  }
 
   return {
     ...user,
-    employee: employee || undefined,
+    employee: undefined,
   };
 }
 
@@ -309,10 +352,10 @@ export async function updateProfile(
 }
 
 /**
- * Reset user password (admin only)
+ * Reset user password (admin only, scoped to company)
  */
-export async function resetPassword(loginId: string): Promise<{ loginId: string; tempPassword: string }> {
-  const user = await findUserByLoginIdForReset(loginId);
+export async function resetPassword(loginId: string, companyId: string): Promise<{ loginId: string; tempPassword: string }> {
+  const user = await findUserByLoginIdForReset(loginId, companyId);
   if (!user) {
     throw new AppError('USER_NOT_FOUND', 'User not found', 404);
   }
@@ -321,10 +364,10 @@ export async function resetPassword(loginId: string): Promise<{ loginId: string;
   const tempPassword = generateSecureToken(12);
   const passwordHash = await hashPassword(tempPassword);
 
-  // Update password and set must_change_password=true
-  await resetUserPassword(loginId, passwordHash);
+  // Update password and set must_change_password=true (scoped to company)
+  await resetUserPassword(loginId, passwordHash, companyId);
 
-  logger.info({ userId: user.id, loginId }, 'Password reset by admin');
+  logger.info({ userId: user.id, loginId, companyId }, 'Password reset by admin');
 
   return {
     loginId: user.loginId,

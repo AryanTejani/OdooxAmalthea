@@ -1,12 +1,14 @@
 import { Router } from 'express';
-import { requireAuth } from '../../middleware/requireAuth';
+import { requireAuth } from '../../middleware/auth';
+import { requireTenant } from '../../middleware/tenant';
 import { requireHROfficer } from '../../middleware/rbac';
 import * as timeTrackingController from './time-tracking.controller';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication and tenant context
 router.use(requireAuth);
+router.use(requireTenant);
 
 // Projects
 router.get('/projects', timeTrackingController.getAllProjectsController);

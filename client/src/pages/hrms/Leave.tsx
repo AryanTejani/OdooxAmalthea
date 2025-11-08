@@ -251,7 +251,7 @@ export function Leave() {
   };
 
   // HR Officer, Payroll Officer (manager), and Admin can approve leaves
-  const canManageLeaves = user?.role === 'hr' || user?.role === 'manager' || user?.role === 'admin';
+  const canManageLeaves = user?.role === 'hr' || user?.role === 'payroll' || user?.role === 'admin';
 
   return (
     <div className="space-y-6 p-6">

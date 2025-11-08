@@ -6,6 +6,7 @@ export interface AccessTokenPayload {
   email: string;
   name: string;
   role: string;
+  companyId?: string;
 }
 
 export interface RefreshTokenPayload {
@@ -18,6 +19,7 @@ interface UserForToken {
   email: string;
   name: string;
   role: string;
+  companyId?: string | null;
 }
 
 /**
@@ -29,6 +31,7 @@ export function signAccessToken(user: UserForToken): string {
     email: user.email,
     name: user.name,
     role: user.role,
+    companyId: user.companyId || undefined,
   };
 
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, {

@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import * as payrollController from './payroll.controller';
-import { requireAuth } from '../../middleware/requireAuth';
+import { requireAuth } from '../../middleware/auth';
+import { requireTenant } from '../../middleware/tenant';
 import { requirePayrollOfficer } from '../../middleware/rbac';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication and tenant context
 router.use(requireAuth);
+router.use(requireTenant);
 
 // All payroll routes require Payroll Officer or Admin
 // Employees and HR Officers cannot access payroll

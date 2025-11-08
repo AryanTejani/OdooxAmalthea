@@ -22,7 +22,7 @@ router.get('/:id/configuration', salaryController.getSalaryConfigurationControll
 // Update salary configuration (admin/payroll only)
 router.put(
   '/:id/configuration',
-  requireRole(['admin', 'manager']),
+  requireRole(['admin', 'payroll']),
   salaryController.updateSalaryConfigurationController
 );
 

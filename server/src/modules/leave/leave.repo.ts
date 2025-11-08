@@ -8,7 +8,7 @@ interface LeaveRequestWithEmployee extends LeaveRequest {
 }
 
 /**
- * Create leave request
+ * Create leave request (sets company_id from employee)
  */
 export async function createLeaveRequest(data: {
   employeeId: string;
@@ -21,11 +21,26 @@ export async function createLeaveRequest(data: {
   const startStr = new Date(data.startDate).toISOString().split('T')[0];
   const endStr = new Date(data.endDate).toISOString().split('T')[0];
   
+  // Get employee's company_id
+  const empCheck = await query(
+    'SELECT company_id FROM employees WHERE id = $1',
+    [data.employeeId]
+  );
+  
+  if (empCheck.rows.length === 0) {
+    throw new Error('Employee not found');
+  }
+  
+  const companyId = empCheck.rows[0].company_id;
+  if (!companyId) {
+    throw new Error('Employee has no company_id');
+  }
+  
   const result = await query(
-    `INSERT INTO leave_requests (employee_id, type, start_date, end_date, reason, attachment_url) 
-     VALUES ($1, $2, $3, $4, $5, $6) 
-     RETURNING id, employee_id, type, start_date, end_date, reason, attachment_url, status, approver_id, created_at, updated_at`,
-    [data.employeeId, data.type, startStr, endStr, data.reason, data.attachmentUrl || null]
+    `INSERT INTO leave_requests (employee_id, company_id, type, start_date, end_date, reason, attachment_url) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7) 
+     RETURNING id, employee_id, company_id, type, start_date, end_date, reason, attachment_url, status, approver_id, created_at, updated_at`,
+    [data.employeeId, companyId, data.type, startStr, endStr, data.reason, data.attachmentUrl || null]
   );
   
   const row = result.rows[0];
@@ -43,15 +58,16 @@ export async function createLeaveRequest(data: {
     updatedAt: row.updated_at,
   };
   
-  // Get employee with org unit
+  // Get employee with org unit (filtered by company)
   const empResult = await query(
     `SELECT 
-       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.company_id, e.created_at, e.updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM employees e
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     WHERE e.id = $1`,
-    [data.employeeId]
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     WHERE e.id = $1
+     AND e.company_id = $2`,
+    [data.employeeId, companyId]
   );
   
   if (empResult.rows.length > 0) {
@@ -84,20 +100,21 @@ export async function createLeaveRequest(data: {
 }
 
 /**
- * Get leave requests by employee ID
+ * Get leave requests by employee ID (filtered by company)
  */
-export async function getLeaveRequestsByEmployeeId(employeeId: string): Promise<LeaveRequestWithEmployee[]> {
+export async function getLeaveRequestsByEmployeeId(employeeId: string, companyId: string): Promise<LeaveRequestWithEmployee[]> {
   const result = await query(
     `SELECT 
-       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.attachment_url, l.status, l.approver_id, l.created_at, l.updated_at,
+       l.id, l.employee_id, l.company_id, l.type, l.start_date, l.end_date, l.reason, l.attachment_url, l.status, l.approver_id, l.created_at, l.updated_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM leave_requests l
-     INNER JOIN employees e ON l.employee_id = e.id
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
+     INNER JOIN employees e ON l.employee_id = e.id AND e.company_id = $2
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
      WHERE l.employee_id = $1
+     AND l.company_id = $2
      ORDER BY l.created_at DESC`,
-    [employeeId]
+    [employeeId, companyId]
   );
   
   return result.rows.map((row) => {
@@ -142,22 +159,23 @@ export async function getLeaveRequestsByEmployeeId(employeeId: string): Promise<
 }
 
 /**
- * Get pending leave requests
+ * Get pending leave requests (filtered by company)
  */
-export async function getPendingLeaveRequests(): Promise<LeaveRequestWithEmployee[]> {
+export async function getPendingLeaveRequests(companyId: string): Promise<LeaveRequestWithEmployee[]> {
   const result = await query(
     `SELECT 
-       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.attachment_url, l.status, l.approver_id, l.created_at, l.updated_at,
+       l.id, l.employee_id, l.company_id, l.type, l.start_date, l.end_date, l.reason, l.attachment_url, l.status, l.approver_id, l.created_at, l.updated_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
        u.name as user_name, u.email as user_email,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM leave_requests l
-     INNER JOIN employees e ON l.employee_id = e.id
-     INNER JOIN users u ON e.user_id = u.id
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
+     INNER JOIN employees e ON l.employee_id = e.id AND e.company_id = $1
+     INNER JOIN users u ON e.user_id = u.id AND u.company_id = $1
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $1
      WHERE l.status = 'PENDING'
+     AND l.company_id = $1
      ORDER BY l.created_at ASC`,
-    []
+    [companyId]
   );
   
   return result.rows.map((row) => {
@@ -204,19 +222,20 @@ export async function getPendingLeaveRequests(): Promise<LeaveRequestWithEmploye
 }
 
 /**
- * Get leave request by ID
+ * Get leave request by ID (filtered by company)
  */
-export async function getLeaveRequestById(id: string): Promise<LeaveRequestWithEmployee | null> {
+export async function getLeaveRequestById(id: string, companyId: string): Promise<LeaveRequestWithEmployee | null> {
   const result = await query(
     `SELECT 
-       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.attachment_url, l.status, l.approver_id, l.created_at, l.updated_at,
+       l.id, l.employee_id, l.company_id, l.type, l.start_date, l.end_date, l.reason, l.attachment_url, l.status, l.approver_id, l.created_at, l.updated_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM leave_requests l
-     INNER JOIN employees e ON l.employee_id = e.id
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     WHERE l.id = $1`,
-    [id]
+     INNER JOIN employees e ON l.employee_id = e.id AND e.company_id = $2
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     WHERE l.id = $1
+     AND l.company_id = $2`,
+    [id, companyId]
   );
   
   if (result.rows.length === 0) {
@@ -264,16 +283,21 @@ export async function getLeaveRequestById(id: string): Promise<LeaveRequestWithE
 }
 
 /**
- * Approve leave request
+ * Approve leave request (filtered by company)
  */
-export async function approveLeaveRequest(id: string, approverId: string): Promise<LeaveRequestWithEmployee> {
+export async function approveLeaveRequest(id: string, approverId: string, companyId: string): Promise<LeaveRequestWithEmployee> {
   const result = await query(
     `UPDATE leave_requests 
      SET status = 'APPROVED', approver_id = $2 
      WHERE id = $1 
-     RETURNING id, employee_id, type, start_date, end_date, reason, status, approver_id, created_at, updated_at`,
-    [id, approverId]
+     AND company_id = $3
+     RETURNING id, employee_id, company_id, type, start_date, end_date, reason, status, approver_id, created_at, updated_at`,
+    [id, approverId, companyId]
   );
+  
+  if (result.rows.length === 0) {
+    throw new Error('Leave request not found or does not belong to this company');
+  }
   
   const row = result.rows[0];
   const leaveRequest: LeaveRequest = {
@@ -290,15 +314,16 @@ export async function approveLeaveRequest(id: string, approverId: string): Promi
     updatedAt: row.updated_at,
   };
   
-  // Get employee with org unit
+  // Get employee with org unit (filtered by company)
   const empResult = await query(
     `SELECT 
-       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.company_id, e.created_at, e.updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM employees e
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     WHERE e.id = $1`,
-    [row.employee_id]
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     WHERE e.id = $1
+     AND e.company_id = $2`,
+    [row.employee_id, companyId]
   );
   
   if (empResult.rows.length > 0) {
@@ -331,10 +356,11 @@ export async function approveLeaveRequest(id: string, approverId: string): Promi
 }
 
 /**
- * Update leave request (only for PENDING status)
+ * Update leave request (only for PENDING status) - filtered by company
  */
 export async function updateLeaveRequest(
   id: string,
+  companyId: string,
   data: {
     type?: LeaveType;
     startDate?: Date;
@@ -343,8 +369,8 @@ export async function updateLeaveRequest(
     attachmentUrl?: string | null;
   }
 ): Promise<LeaveRequestWithEmployee> {
-  // First check if leave exists and is PENDING
-  const existing = await getLeaveRequestById(id);
+  // First check if leave exists and is PENDING (filtered by company)
+  const existing = await getLeaveRequestById(id, companyId);
   if (!existing) {
     throw new Error('Leave request not found');
   }
@@ -391,14 +417,20 @@ export async function updateLeaveRequest(
 
   updates.push(`updated_at = now()`);
   params.push(id);
+  params.push(companyId);
 
   const result = await query(
     `UPDATE leave_requests 
      SET ${updates.join(', ')} 
-     WHERE id = $${paramIndex}
-     RETURNING id, employee_id, type, start_date, end_date, reason, attachment_url, status, approver_id, created_at, updated_at`,
+     WHERE id = $${paramIndex - 1}
+     AND company_id = $${paramIndex}
+     RETURNING id, employee_id, company_id, type, start_date, end_date, reason, attachment_url, status, approver_id, created_at, updated_at`,
     params
   );
+  
+  if (result.rows.length === 0) {
+    throw new Error('Leave request not found or does not belong to this company');
+  }
 
   const row = result.rows[0];
   const leaveRequest: LeaveRequest = {
@@ -456,16 +488,21 @@ export async function updateLeaveRequest(
 }
 
 /**
- * Reject leave request
+ * Reject leave request (filtered by company)
  */
-export async function rejectLeaveRequest(id: string, approverId: string): Promise<LeaveRequestWithEmployee> {
+export async function rejectLeaveRequest(id: string, approverId: string, companyId: string): Promise<LeaveRequestWithEmployee> {
   const result = await query(
     `UPDATE leave_requests 
      SET status = 'REJECTED', approver_id = $2 
      WHERE id = $1 
-     RETURNING id, employee_id, type, start_date, end_date, reason, status, approver_id, created_at, updated_at`,
-    [id, approverId]
+     AND company_id = $3
+     RETURNING id, employee_id, company_id, type, start_date, end_date, reason, status, approver_id, created_at, updated_at`,
+    [id, approverId, companyId]
   );
+  
+  if (result.rows.length === 0) {
+    throw new Error('Leave request not found or does not belong to this company');
+  }
   
   const row = result.rows[0];
   const leaveRequest: LeaveRequest = {
@@ -482,15 +519,16 @@ export async function rejectLeaveRequest(id: string, approverId: string): Promis
     updatedAt: row.updated_at,
   };
   
-  // Get employee with org unit
+  // Get employee with org unit (filtered by company)
   const empResult = await query(
     `SELECT 
-       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.company_id, e.created_at, e.updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM employees e
-     LEFT JOIN org_units o ON e.org_unit_id = o.id
-     WHERE e.id = $1`,
-    [row.employee_id]
+     LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $2
+     WHERE e.id = $1
+     AND e.company_id = $2`,
+    [row.employee_id, companyId]
   );
   
   if (empResult.rows.length > 0) {

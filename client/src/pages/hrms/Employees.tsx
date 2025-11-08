@@ -32,13 +32,21 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Copy, Check } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const createEmployeeSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Invalid email address'),
   phone: z.string().optional(),
-  companyName: z.string().min(1, 'Company name is required'),
+  companyName: z.string().min(1, 'Company name is required').optional(),
+  role: z.enum(['admin', 'hr', 'payroll', 'employee']).default('employee'),
   orgUnitId: z.string().uuid().optional().or(z.literal('')),
   title: z.string().optional(),
   joinDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
@@ -84,9 +92,9 @@ function CredentialsModal({ open, onClose, loginId, tempPassword }: CredentialsM
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Employee Credentials</DialogTitle>
+          <DialogTitle>User Credentials</DialogTitle>
           <DialogDescription>
-            Save these credentials securely. The employee will need to change their password on first login.
+            Credentials have been sent via email. Save these credentials securely. The user will need to change their password on first login.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -128,7 +136,7 @@ function CredentialsModal({ open, onClose, loginId, tempPassword }: CredentialsM
           </div>
           <div className="rounded-md bg-yellow-50 border border-yellow-200 p-3">
             <p className="text-sm text-yellow-800">
-              <strong>Important:</strong> Share these credentials with the employee securely. They will be required to change their password on first login.
+              <strong>Important:</strong> Credentials have been sent to the user's email address. They will be required to change their password on first login.
             </p>
           </div>
         </div>
@@ -168,20 +176,29 @@ export function Employees() {
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
+    watch,
   } = useForm<CreateEmployeeForm>({
     resolver: zodResolver(createEmployeeSchema),
     defaultValues: {
+      role: 'employee',
       joinDate: new Date().toISOString().split('T')[0],
     },
   });
 
+  const selectedRole = watch('role');
+
   const createMutation = useMutation({
-    mutationFn: (data: CreateEmployeeForm) => hrmsApi.createEmployee(data),
+    mutationFn: (data: CreateEmployeeForm) => hrmsApi.createEmployee({
+      ...data,
+      companyName: undefined, // Remove companyName as it's deprecated
+    }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
-      toast.success('Employee created successfully!');
+      toast.success('User created successfully! Credentials sent via email.');
       setCreateDialogOpen(false);
       reset();
+      // Still show credentials modal in case email fails or admin wants to see them
       setCredentialsModal({
         open: true,
         loginId: result.credentials.loginId,
@@ -197,9 +214,22 @@ export function Employees() {
     createMutation.mutate(data);
   };
 
-  // Only HR Officer and Admin can create employees
+  // Only HR Officer and Admin can create users
   // All users (including employees) can view the employee directory
-  const canCreateEmployees = user?.role === 'hr' || user?.role === 'admin';
+  const canCreateUsers = user?.role === 'hr' || user?.role === 'admin';
+  
+  // Admin can create any role, HR can only create employee and payroll
+  const availableRoles = user?.role === 'admin' 
+    ? [
+        { value: 'admin', label: 'Administrator' },
+        { value: 'hr', label: 'HR Officer' },
+        { value: 'payroll', label: 'Payroll Officer' },
+        { value: 'employee', label: 'Employee' },
+      ]
+    : [
+        { value: 'employee', label: 'Employee' },
+        { value: 'payroll', label: 'Payroll Officer' },
+      ];
 
   return (
     <div className="space-y-6 p-6">
@@ -207,13 +237,13 @@ export function Employees() {
         <div>
           <h1 className="text-3xl font-bold">Employee Directory</h1>
           <p className="text-muted-foreground mt-1">
-            {canCreateEmployees 
-              ? 'Manage employees and create new employee accounts'
+            {canCreateUsers 
+              ? 'Manage users and create new user accounts'
               : 'View employee directory'}
           </p>
         </div>
-        {canCreateEmployees && (
-          <Button onClick={() => setCreateDialogOpen(true)}>Add Employee</Button>
+        {canCreateUsers && (
+          <Button onClick={() => setCreateDialogOpen(true)}>Add User</Button>
         )}
       </div>
 
@@ -221,8 +251,8 @@ export function Employees() {
         <CardHeader>
           <CardTitle>Employees</CardTitle>
           <CardDescription>
-            {canCreateEmployees
-              ? 'Employee directory with management options. Click "Add Employee" to create new accounts.'
+            {canCreateUsers
+              ? 'User directory with management options. Click "Add User" to create new accounts.'
               : 'Browse the employee directory (read-only)'}
           </CardDescription>
         </CardHeader>
@@ -261,9 +291,9 @@ export function Employees() {
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add New Employee</DialogTitle>
+            <DialogTitle>Add New User</DialogTitle>
             <DialogDescription>
-              Fill in the employee details. Login ID and temporary password will be auto-generated.
+              Fill in the user details. Login ID and temporary password will be auto-generated and sent via email.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -319,18 +349,29 @@ export function Employees() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="companyName">Company Name *</Label>
-              <Input
-                id="companyName"
-                {...register('companyName')}
-                disabled={createMutation.isPending}
-                placeholder="e.g., Odoo India"
-              />
-              {errors.companyName && (
-                <p className="text-sm text-destructive">{errors.companyName.message}</p>
+              <Label htmlFor="role">Role *</Label>
+              <Select
+                value={selectedRole || 'employee'}
+                onValueChange={(value) => setValue('role', value as any)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableRoles.map((role) => (
+                    <SelectItem key={role.value} value={role.value}>
+                      {role.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.role && (
+                <p className="text-sm text-destructive">{errors.role.message}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                First 2 letters will be used in the login ID (e.g., "OI" for "Odoo India")
+                {user?.role === 'hr' 
+                  ? 'HR can only create Employee and Payroll Officer roles'
+                  : 'Admin can create any role'}
               </p>
             </div>
 

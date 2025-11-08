@@ -6,8 +6,17 @@ import { z } from 'zod';
 
 export async function generatePayrunController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const query = generatePayrunSchema.parse(req.query);
-    const summary = await payrollService.generatePayrun(query, req.user!.userId);
+    const summary = await payrollService.generatePayrun(query, req.user!.userId, req.companyId);
     res.status(201).json({ data: summary });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -34,7 +43,16 @@ export async function generatePayrunController(req: Request, res: Response): Pro
 
 export async function getPayrunsController(req: Request, res: Response): Promise<void> {
   try {
-    const payruns = await payrollService.getPayruns();
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
+    const payruns = await payrollService.getPayruns(req.companyId);
     res.json({ data: payruns });
   } catch (error) {
     logger.error({ error }, 'Failed to get payruns');
@@ -49,8 +67,17 @@ export async function getPayrunsController(req: Request, res: Response): Promise
 
 export async function finalizePayrunController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { payrunId } = req.params;
-    const payrun = await payrollService.finalizePayrun(payrunId, req.user!.userId);
+    const payrun = await payrollService.finalizePayrun(payrunId, req.user!.userId, req.companyId);
     res.json({ data: payrun });
   } catch (error) {
     logger.error({ error }, 'Failed to finalize payrun');
@@ -66,8 +93,17 @@ export async function finalizePayrunController(req: Request, res: Response): Pro
 
 export async function getPayslipsByPayrunIdController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { payrunId } = req.params;
-    const payslips = await payrollService.getPayslipsByPayrunId(payrunId);
+    const payslips = await payrollService.getPayslipsByPayrunId(payrunId, req.companyId);
     res.json({ data: payslips });
   } catch (error) {
     logger.error({ error }, 'Failed to get payslips');
@@ -82,8 +118,17 @@ export async function getPayslipsByPayrunIdController(req: Request, res: Respons
 
 export async function getPayslipByIdController(req: Request, res: Response): Promise<void> {
   try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
     const { id } = req.params;
-    const payslip = await payrollService.getPayslipById(id);
+    const payslip = await payrollService.getPayslipById(id, req.companyId);
     if (!payslip) {
       res.status(404).json({
         error: {

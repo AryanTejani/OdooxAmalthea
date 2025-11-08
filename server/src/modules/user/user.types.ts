@@ -16,6 +16,8 @@ export interface User {
   manager: string | null;
   location: string | null;
   company: string | null;
+  companyId: string | null;
+  avatarUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +32,8 @@ export type CreateUserInput = {
   loginId?: string | null;
   mustChangePassword?: boolean;
   phone?: string | null;
+  companyId?: string | null;
+  avatarUrl?: string | null;
 };
 
 export interface Session {
