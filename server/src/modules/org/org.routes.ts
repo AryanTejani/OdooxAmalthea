@@ -23,6 +23,9 @@ router.get('/employees/me', orgController.getEmployeeByUserIdController);
 // Get all employees (all authenticated users can view employee directory)
 router.get('/employees', orgController.getAllEmployeesController);
 
+// Get employees grid with status (for landing page)
+router.get('/employees/grid', orgController.getEmployeesGridController);
+
 export default router;
 
 

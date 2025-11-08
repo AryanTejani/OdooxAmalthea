@@ -56,7 +56,7 @@ export function Login() {
         navigate('/first-login');
       } else {
         toast.success('Logged in successfully!');
-        navigate('/hrms/dashboard');
+        navigate('/');
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Login failed');

@@ -7,10 +7,12 @@ import { apiRateLimit } from './middleware/rateLimit';
 import authRoutes from './modules/auth/auth.routes';
 import googleOAuthRoutes from './modules/oauth/google.routes';
 import orgRoutes from './modules/org/org.routes';
+import employeesRoutes from './modules/employees/employees.routes';
 import attendanceRoutes from './modules/attendance/attendance.routes';
 import leaveRoutes from './modules/leave/leave.routes';
 import payrollRoutes from './modules/payroll/payroll.routes';
 import activityRoutes from './modules/activity/activity.routes';
+import timeTrackingRoutes from './modules/time-tracking/time-tracking.routes';
 import { healthCheck } from './libs/db';
 import { logger } from './config/logger';
 
@@ -46,10 +48,12 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/auth/google', googleOAuthRoutes);
 app.use('/api/org', orgRoutes);
+app.use('/api/employees', employeesRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/time-tracking', timeTrackingRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

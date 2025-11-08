@@ -28,7 +28,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   // Redirect away from first-login if password doesn't need to be changed
   if (!mustChangePassword && location.pathname === '/first-login') {
-    return <Navigate to="/hrms/dashboard" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
