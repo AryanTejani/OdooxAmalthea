@@ -14,6 +14,9 @@ router.post('/', leaveController.createLeaveRequestController);
 // Get my leave requests
 router.get('/mine', leaveController.getMyLeaveRequestsController);
 
+// Update leave request (only for PENDING status, employee can only update their own)
+router.patch('/:id', leaveController.updateLeaveRequestController);
+
 // Get pending leave requests (HR Officer, Payroll Officer, Admin only)
 router.get('/pending', requireLeaveApprover, leaveController.getPendingLeaveRequestsController);
 

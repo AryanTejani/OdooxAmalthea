@@ -3,11 +3,13 @@ import { leaveService } from './leave.service';
 import { orgService } from '../org/org.service';
 import {
   createLeaveRequestSchema,
+  updateLeaveRequestSchema,
   approveLeaveSchema,
   rejectLeaveSchema,
 } from '../../domain/schemas';
 import { logger } from '../../config/logger';
 import { z } from 'zod';
+import { AppError } from '../../middleware/errors';
 
 export async function createLeaveRequestController(req: Request, res: Response): Promise<void> {
   try {
@@ -124,6 +126,61 @@ export async function approveLeaveRequestController(req: Request, res: Response)
     res.status(400).json({
       error: {
         code: 'APPROVE_FAILED',
+        message,
+      },
+    });
+  }
+}
+
+export async function updateLeaveRequestController(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+
+    // Get employee for this user
+    const employee = await orgService.getEmployeeByUserId(userId);
+    if (!employee) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Employee not found',
+        },
+      });
+      return;
+    }
+
+    const data = updateLeaveRequestSchema.parse(req.body);
+    const leave = await leaveService.updateLeaveRequest(id, data, userId, employee.id);
+
+    res.json({ data: leave });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.error({ error: error.errors, body: req.body }, 'Leave request update validation failed');
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid input',
+          details: error.errors,
+        },
+      });
+      return;
+    }
+
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
+      return;
+    }
+
+    logger.error({ error, body: req.body }, 'Failed to update leave request');
+    const message = error instanceof Error ? error.message : 'Failed to update leave request';
+    res.status(400).json({
+      error: {
+        code: 'UPDATE_FAILED',
         message,
       },
     });

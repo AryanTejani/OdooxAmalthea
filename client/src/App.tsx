@@ -12,7 +12,6 @@ import { Profile } from '@/pages/hrms/Profile';
 import { FirstLogin } from '@/pages/FirstLogin';
 import { Landing } from '@/pages/hrms/Landing';
 import { Dashboard } from '@/pages/hrms/Dashboard';
-import { Attendance } from '@/pages/hrms/Attendance';
 import { AttendanceAdmin } from '@/pages/hrms/AttendanceAdmin';
 import { AttendanceMe } from '@/pages/hrms/AttendanceMe';
 import { Leave } from '@/pages/hrms/Leave';
@@ -102,7 +101,7 @@ function App() {
             <Route
               path="/hrms/leave/approvals"
               element={
-                <RoleProtectedRoute allowedRoles={['admin', 'hr', 'manager']} feature="Leave Approvals">
+                <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']} feature="Leave Approvals">
                   <HRMSLayout>
                     <LeaveApprovals />
                   </HRMSLayout>
@@ -112,7 +111,7 @@ function App() {
             <Route
               path="/hrms/payroll"
               element={
-                <RoleProtectedRoute allowedRoles={['admin', 'manager']} feature="Payroll">
+                <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Payroll">
                   <HRMSLayout>
                     <Payroll />
                   </HRMSLayout>
@@ -152,7 +151,7 @@ function App() {
             <Route
               path="/hrms/time-logs"
               element={
-                <RoleProtectedRoute allowedRoles={['admin', 'hr']} feature="Time Logs">
+                <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']} feature="Time Logs">
                   <HRMSLayout>
                     <TimeLogs />
                   </HRMSLayout>

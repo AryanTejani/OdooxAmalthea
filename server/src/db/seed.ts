@@ -101,6 +101,85 @@ async function main() {
     logger.info('');
   }
 
+  // Create sample org units
+  logger.info('🏢 Creating sample organization units...');
+  
+  const orgUnits = [
+    { name: 'Engineering', parentId: null as string | null },
+    { name: 'Product', parentId: null as string | null },
+    { name: 'Sales', parentId: null as string | null },
+    { name: 'HR', parentId: null as string | null },
+    { name: 'Finance', parentId: null as string | null },
+    { name: 'Frontend Team', parentId: null as string | null }, // Will be updated to Engineering if it exists
+    { name: 'Backend Team', parentId: null as string | null }, // Will be updated to Engineering if it exists
+  ];
+
+  const createdOrgUnits: Array<{ id: string; name: string }> = [];
+
+  for (const unit of orgUnits) {
+    // Check if org unit already exists
+    const existingUnit = await query(
+      'SELECT id FROM org_units WHERE name = $1',
+      [unit.name]
+    );
+
+    if (existingUnit.rows.length > 0) {
+      const existingId = existingUnit.rows[0].id;
+      createdOrgUnits.push({ id: existingId, name: unit.name });
+      logger.info(`   ✅ Org unit "${unit.name}" already exists`);
+    } else {
+      // If parentId is specified but we need to find it
+      let parentId: string | null = unit.parentId;
+      if (unit.name === 'Frontend Team' || unit.name === 'Backend Team') {
+        // Find Engineering org unit
+        const engUnit = createdOrgUnits.find(u => u.name === 'Engineering');
+        if (engUnit) {
+          parentId = engUnit.id;
+        }
+      }
+
+      const result = await query(
+        `INSERT INTO org_units (name, parent_id) 
+         VALUES ($1, $2) 
+         RETURNING id, name`,
+        [unit.name, parentId]
+      );
+
+      const created = result.rows[0];
+      createdOrgUnits.push({ id: created.id, name: created.name });
+      if (parentId) {
+        const parentName = createdOrgUnits.find(u => u.id === parentId)?.name || 'Unknown';
+        logger.info(`   ✅ Created org unit: "${created.name}" (parent: ${parentName})`);
+      } else {
+        logger.info(`   ✅ Created org unit: "${created.name}"`);
+      }
+    }
+  }
+
+  // Update Frontend Team and Backend Team to have Engineering as parent if they don't already
+  const engUnit = createdOrgUnits.find(u => u.name === 'Engineering');
+  if (engUnit) {
+    for (const teamName of ['Frontend Team', 'Backend Team']) {
+      const teamUnit = createdOrgUnits.find(u => u.name === teamName);
+      if (teamUnit) {
+        // Check current parent
+        const currentUnit = await query(
+          'SELECT parent_id FROM org_units WHERE id = $1',
+          [teamUnit.id]
+        );
+        if (currentUnit.rows.length > 0 && currentUnit.rows[0].parent_id !== engUnit.id) {
+          await query(
+            'UPDATE org_units SET parent_id = $1 WHERE id = $2',
+            [engUnit.id, teamUnit.id]
+          );
+          logger.info(`   🔄 Updated "${teamName}" to have Engineering as parent`);
+        }
+      }
+    }
+  }
+
+  logger.info('');
+
   logger.info('📋 Login Credentials:');
   logger.info('');
   logger.info('👤 Admin User:');
@@ -110,6 +189,11 @@ async function main() {
   logger.info('👤 HR User:');
   logger.info(`   Email: ${hrEmail} OR Login ID: ${hrLoginId}`);
   logger.info(`   Password: ${hrPassword}`);
+  logger.info('');
+  logger.info('🏢 Sample Org Units Created:');
+  createdOrgUnits.forEach(unit => {
+    logger.info(`   - ${unit.name}`);
+  });
   logger.info('');
   logger.info('🚀 You can now login and create employees!');
 }

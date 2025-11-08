@@ -432,10 +432,7 @@ export async function getAllEmployees(): Promise<EmployeeWithRelations[]> {
  * Get employees grid with current status (present/absent/leave)
  */
 export async function getEmployeesGrid(search?: string): Promise<any[]> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split('T')[0];
-  
+  // Use PostgreSQL's CURRENT_DATE for consistent date handling (server timezone)
   let sql = `
     SELECT DISTINCT ON (e.id)
       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
@@ -447,21 +444,18 @@ export async function getEmployeesGrid(search?: string): Promise<any[]> {
         WHEN EXISTS (
           SELECT 1 FROM leave_requests l 
           WHERE l.employee_id = e.id 
-          AND l.status = 'APPROVED' 
-          AND l.start_date <= $1::date 
-          AND l.end_date >= $1::date
+          AND l.status IN ('APPROVED', 'PENDING')
+          AND l.start_date <= CURRENT_DATE
+          AND l.end_date >= CURRENT_DATE
         ) THEN 'leave'
-        WHEN tl.id IS NOT NULL AND a.updated_at IS NOT NULL AND a.updated_at > NOW() - INTERVAL '15 minutes' THEN 'active'
-        WHEN tl.id IS NOT NULL THEN 'idle'
-        WHEN a.status = 'PRESENT' AND a.in_at IS NOT NULL AND a.out_at IS NULL THEN 'active'
-        WHEN a.status = 'PRESENT' AND a.in_at IS NOT NULL AND a.out_at IS NOT NULL THEN 'off'
-        WHEN a.status = 'ABSENT' OR a.id IS NULL THEN 'off'
-        ELSE 'off'
+        WHEN a.status = 'PRESENT' AND a.in_at IS NOT NULL THEN 'present'
+        WHEN tl.id IS NOT NULL THEN 'present'
+        ELSE 'absent'
       END as status
     FROM employees e
     INNER JOIN users u ON e.user_id = u.id
     LEFT JOIN org_units o ON e.org_unit_id = o.id
-    LEFT JOIN attendance a ON e.id = a.employee_id AND a.day = $1
+    LEFT JOIN attendance a ON e.id = a.employee_id AND a.day = CURRENT_DATE
     LEFT JOIN LATERAL (
       SELECT id, start_time 
       FROM time_logs 
@@ -473,7 +467,7 @@ export async function getEmployeesGrid(search?: string): Promise<any[]> {
     WHERE 1=1
   `;
   
-  const params: any[] = [todayStr];
+  const params: any[] = [];
   
   if (search) {
     sql += ` AND (u.name ILIKE $${params.length + 1} OR u.email ILIKE $${params.length + 1} OR e.code ILIKE $${params.length + 1})`;
@@ -499,7 +493,7 @@ export async function getEmployeesGrid(search?: string): Promise<any[]> {
       createdAt: row.org_created_at,
       updatedAt: row.org_updated_at,
     } : null,
-    status: row.status, // 'active', 'idle', 'off', 'leave'
+    status: row.status, // 'present', 'absent', 'leave'
     attendanceId: row.attendance_id,
     attendanceStatus: row.attendance_status,
     inAt: row.in_at,

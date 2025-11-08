@@ -33,26 +33,18 @@ export function EmployeeCard({ employee, onClick }: EmployeeCardProps) {
       );
     }
     
-    if (employee.status === 'active') {
+    if (employee.status === 'present') {
       return (
-        <div className="absolute top-2 right-2" title="Active">
-          <div className="h-3 w-3 rounded-full bg-green-500 border-2 border-white shadow-sm animate-pulse" />
+        <div className="absolute top-2 right-2" title="Present">
+          <div className="h-3 w-3 rounded-full bg-green-500 border-2 border-white shadow-sm" />
         </div>
       );
     }
     
-    if (employee.status === 'idle') {
-      return (
-        <div className="absolute top-2 right-2" title="Idle">
-          <div className="h-3 w-3 rounded-full bg-yellow-500 border-2 border-white shadow-sm" />
-        </div>
-      );
-    }
-    
-    // off
+    // absent
     return (
-      <div className="absolute top-2 right-2" title="Off">
-        <div className="h-3 w-3 rounded-full bg-gray-400 border-2 border-white shadow-sm" />
+      <div className="absolute top-2 right-2" title="Absent">
+        <div className="h-3 w-3 rounded-full bg-yellow-500 border-2 border-white shadow-sm" />
       </div>
     );
   };

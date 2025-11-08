@@ -11,6 +11,15 @@ export const api = axios.create({
   },
 });
 
+// Request interceptor to handle FormData (don't set Content-Type for FormData)
+api.interceptors.request.use((config) => {
+  if (config.data instanceof FormData) {
+    // Remove Content-Type header to let browser set it with boundary
+    delete config.headers['Content-Type'];
+  }
+  return config;
+});
+
 // Track if we're currently refreshing to avoid multiple refresh calls
 let isRefreshing = false;
 let refreshSubscribers: Array<(token: string) => void> = [];
@@ -217,7 +226,8 @@ export interface LeaveRequest {
   type: 'CASUAL' | 'SICK' | 'UNPAID';
   startDate: string;
   endDate: string;
-  reason?: string;
+  reason: string;
+  attachmentUrl?: string | null;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   approverId?: string;
   createdAt: string;
@@ -432,9 +442,35 @@ export const hrmsApi = {
     type: 'CASUAL' | 'SICK' | 'UNPAID';
     startDate: string;
     endDate: string;
-    reason?: string;
+    reason: string;
+    attachmentUrl?: string;
   }): Promise<LeaveRequest> => {
     const response = await api.post<{ data: LeaveRequest }>('/api/leave', data);
+    return response.data.data;
+  },
+
+  uploadFile: async (file: File, folder?: string): Promise<{ url: string; publicId: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (folder) {
+      formData.append('folder', folder);
+    }
+    // Don't set Content-Type header - browser will set it with boundary for FormData
+    const response = await api.post<{ data: { url: string; publicId: string } }>('/api/upload/file', formData);
+    return response.data.data;
+  },
+
+  updateLeaveRequest: async (
+    id: string,
+    data: {
+      type?: 'CASUAL' | 'SICK' | 'UNPAID';
+      startDate?: string;
+      endDate?: string;
+      reason?: string;
+      attachmentUrl?: string | null;
+    }
+  ): Promise<LeaveRequest> => {
+    const response = await api.patch<{ data: LeaveRequest }>(`/api/leave/${id}`, data);
     return response.data.data;
   },
 
@@ -573,8 +609,12 @@ export const hrmsApi = {
     startDate?: string;
     endDate?: string;
     billable?: boolean;
+    viewAll?: boolean; // For HR/Payroll to see all employees' logs
   }): Promise<any[]> => {
-    const params = filters || {};
+    const params: any = { ...filters };
+    if (params.viewAll !== undefined) {
+      params.viewAll = params.viewAll ? 'true' : 'false';
+    }
     const response = await api.get<{ data: any[] }>('/api/time-tracking/time-logs', { params });
     return response.data.data;
   },

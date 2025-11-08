@@ -76,21 +76,21 @@ const navItems: NavItem[] = [
     title: 'Time Logs',
     href: '/hrms/time-logs',
     icon: Timer,
-    roles: ['admin', 'hr'],
-    badge: 'HR',
+    roles: ['admin', 'hr', 'payroll'], // Admin, HR Officer, Payroll Officer
+    badge: 'All',
   },
   {
     title: 'Leave Approvals',
     href: '/hrms/leave/approvals',
     icon: FileText,
-    roles: ['admin', 'hr', 'manager'],
+    roles: ['admin', 'hr', 'payroll'],
     badge: 'HR/Payroll',
   },
   {
     title: 'Payroll',
     href: '/hrms/payroll',
     icon: DollarSign,
-    roles: ['admin', 'manager'],
+    roles: ['admin', 'payroll'],
     badge: 'Payroll',
   },
   {
@@ -163,7 +163,7 @@ export function Sidebar() {
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
                 {user?.role === 'admin' && 'Admin'}
                 {user?.role === 'hr' && 'HR Officer'}
-                {user?.role === 'manager' && 'Payroll Officer'}
+                {user?.role === 'payroll' && 'Payroll Officer'}
                 {user?.role === 'employee' && 'Employee'}
               </span>
             </div>

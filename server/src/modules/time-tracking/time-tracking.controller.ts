@@ -14,6 +14,7 @@ import {
 import { logger } from '../../config/logger';
 import { AppError } from '../../middleware/errors';
 import { z } from 'zod';
+import { query } from '../../libs/db';
 
 // ============= PROJECTS =============
 
@@ -180,13 +181,16 @@ export async function getTasksByProjectController(req: Request, res: Response): 
 export async function getTasksByEmployeeController(req: Request, res: Response): Promise<void> {
   try {
     const userId = req.user!.userId;
-    const employee = await orgService.getEmployeeByUserId(userId);
+    const userRole = req.user!.role;
+    
+    // Ensure employee record exists (auto-create for HR/Payroll/Admin)
+    const employee = await ensureEmployeeRecord(userId, userRole);
     
     if (!employee) {
       res.status(404).json({
         error: {
           code: 'NOT_FOUND',
-          message: 'Employee not found',
+          message: 'Employee record not found. Please contact admin to create an employee record for you.',
         },
       });
       return;
@@ -344,38 +348,126 @@ export async function deleteTaskController(req: Request, res: Response): Promise
 
 // ============= TIME LOGS =============
 
+/**
+ * Ensure employee record exists for user (auto-create for HR/Payroll/Admin if missing)
+ */
+async function ensureEmployeeRecord(userId: string, userRole: string): Promise<any> {
+  let employee = await orgService.getEmployeeByUserId(userId);
+  
+  if (!employee && (userRole === 'hr' || userRole === 'payroll' || userRole === 'admin')) {
+    // Get user details including loginId
+    const userResult = await query(
+      'SELECT id, name, login_id FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return null;
+    }
+    
+    const user = userResult.rows[0];
+    const userName = user.name || 'User';
+    const userLoginId = user.login_id;
+    
+    // Auto-create employee record for HR/Payroll/Admin users
+    // Get HR org unit if exists, otherwise use null
+    const hrOrgUnit = await query(
+      "SELECT id FROM org_units WHERE name = 'HR' LIMIT 1"
+    );
+    
+    const orgUnitId = hrOrgUnit.rows.length > 0 ? hrOrgUnit.rows[0].id : null;
+    const code = userLoginId || `AUTO-${userId.substring(0, 8)}`;
+    const joinDate = new Date();
+    
+    // Determine title based on role
+    let title = 'Employee';
+    if (userRole === 'hr') title = 'HR Officer';
+    else if (userRole === 'payroll') title = 'Payroll Officer';
+    else if (userRole === 'admin') title = 'Admin';
+    
+    // Create employee record
+    const employeeResult = await query(
+      `INSERT INTO employees (user_id, org_unit_id, code, title, join_date) 
+       VALUES ($1, $2, $3, $4, $5) 
+       RETURNING id, user_id, org_unit_id, code, title, join_date, created_at, updated_at`,
+      [userId, orgUnitId, code, title, joinDate]
+    );
+    
+    employee = {
+      id: employeeResult.rows[0].id,
+      userId: employeeResult.rows[0].user_id,
+      orgUnitId: employeeResult.rows[0].org_unit_id,
+      code: employeeResult.rows[0].code,
+      title: employeeResult.rows[0].title,
+      joinDate: employeeResult.rows[0].join_date,
+      createdAt: employeeResult.rows[0].created_at,
+      updatedAt: employeeResult.rows[0].updated_at,
+    };
+  }
+  
+  return employee;
+}
+
 export async function getTimeLogsController(req: Request, res: Response): Promise<void> {
   try {
     const query = timeLogQuerySchema.parse(req.query);
     const user = req.user!;
     
-    // Role-based filtering:
-    // - Only admin, hr, and payroll can see all employees' time logs
-    // - All other roles (including employee) can only see their own time logs
-    const allowedRolesToSeeAll = ['admin', 'hr', 'payroll'];
-    const canSeeAllLogs = allowedRolesToSeeAll.includes(user.role);
+    // Role-based access control:
+    // - Admin: Can see all employees' time logs (including HR and Payroll Officers)
+    // - HR Officer and Payroll Officer: Can see their own logs by default, but can filter to see all employees
+    // - Employee: Can only see their own logs
+    const isAdmin = user.role === 'admin';
+    // HR Officer role is 'hr', Payroll Officer role is 'payroll'
+    const isHRorPayroll = user.role === 'hr' || user.role === 'payroll';
+    
+    // Check if HR/Payroll wants to see all employees (via query parameter)
+    const viewAll = req.query.viewAll === 'true' || req.query.viewAll === '1';
     
     let employeeId = query.employeeId;
     
     if (!employeeId) {
-      if (!canSeeAllLogs) {
-        // User is not admin/hr/payroll, restrict to their own logs
-        const employee = await orgService.getEmployeeByUserId(user.userId);
-        if (employee) {
-          employeeId = employee.id;
+      // No employeeId specified in query
+      if (isAdmin) {
+        // Admin: Show all employees (employeeId remains undefined to show all)
+      } else if (isHRorPayroll) {
+        // HR/Payroll: Default to their own logs, unless viewAll is true
+        if (viewAll) {
+          // HR/Payroll wants to see all employees - employeeId remains undefined
         } else {
-          // Employee user but no employee record found
+          // HR/Payroll: Default to their own logs - ensure employee record exists
+          const currentEmployee = await ensureEmployeeRecord(user.userId, user.role);
+          if (currentEmployee) {
+            employeeId = currentEmployee.id;
+          } else {
+            // HR/Payroll user but no employee record found (shouldn't happen after auto-create)
+            res.json({ data: [] });
+            return;
+          }
+        }
+      } else {
+        // Employee: Default to their own logs
+        const currentEmployee = await orgService.getEmployeeByUserId(user.userId);
+        if (currentEmployee) {
+          employeeId = currentEmployee.id;
+        } else {
+          // No employee record found
           res.json({ data: [] });
           return;
         }
       }
-      // If user is admin/hr/payroll, employeeId remains undefined (shows all employees)
     } else {
-      // If employeeId is explicitly provided in query, verify access
-      if (!canSeeAllLogs) {
-        // Non-admin/hr/payroll users can only query their own employeeId
-        const employee = await orgService.getEmployeeByUserId(user.userId);
-        if (!employee || employee.id !== employeeId) {
+      // employeeId is explicitly provided in query
+      if (isAdmin) {
+        // Admin: Can query any employeeId (no restriction)
+        // employeeId is already set from query - show that specific employee
+      } else if (isHRorPayroll) {
+        // HR/Payroll: Can query any employeeId to see all employees' logs
+        // They can see their own (when employeeId matches) or any other employee
+        // No restriction needed - they have access to see all
+      } else {
+        // Employee: Can only query their own employeeId
+        if (!currentEmployee || currentEmployee.id !== employeeId) {
           throw new AppError('FORBIDDEN', 'You can only view your own time logs', 403);
         }
       }
@@ -437,12 +529,13 @@ export async function getTimeLogByIdController(req: Request, res: Response): Pro
     
     // Role-based access control: Only admin/hr/payroll can see all time logs
     // Employees can only see their own time logs
+    // HR Officer role is 'hr', Payroll Officer role is 'payroll'
     const allowedRolesToSeeAll = ['admin', 'hr', 'payroll'];
     const canSeeAllLogs = allowedRolesToSeeAll.includes(user.role);
     
     if (!canSeeAllLogs) {
       // Verify that the time log belongs to the user's employee record
-      const employee = await orgService.getEmployeeByUserId(user.userId);
+      const employee = await ensureEmployeeRecord(user.userId, user.role);
       if (!employee || employee.id !== timeLog.employeeId) {
         throw new AppError('FORBIDDEN', 'You can only view your own time logs', 403);
       }
@@ -473,13 +566,16 @@ export async function getTimeLogByIdController(req: Request, res: Response): Pro
 export async function getActiveTimerController(req: Request, res: Response): Promise<void> {
   try {
     const userId = req.user!.userId;
-    const employee = await orgService.getEmployeeByUserId(userId);
+    const userRole = req.user!.role;
+    
+    // Ensure employee record exists (auto-create for HR/Payroll/Admin)
+    const employee = await ensureEmployeeRecord(userId, userRole);
     
     if (!employee) {
       res.status(404).json({
         error: {
           code: 'NOT_FOUND',
-          message: 'Employee not found',
+          message: 'Employee record not found. Please contact admin to create an employee record for you.',
         },
       });
       return;
@@ -501,13 +597,16 @@ export async function getActiveTimerController(req: Request, res: Response): Pro
 export async function startTimerController(req: Request, res: Response): Promise<void> {
   try {
     const userId = req.user!.userId;
-    const employee = await orgService.getEmployeeByUserId(userId);
+    const userRole = req.user!.role;
+    
+    // Ensure employee record exists (auto-create for HR/Payroll/Admin)
+    const employee = await ensureEmployeeRecord(userId, userRole);
     
     if (!employee) {
       res.status(404).json({
         error: {
           code: 'NOT_FOUND',
-          message: 'Employee not found',
+          message: 'Employee record not found. Please contact admin to create an employee record for you.',
         },
       });
       return;
@@ -560,13 +659,16 @@ export async function startTimerController(req: Request, res: Response): Promise
 export async function stopTimerController(req: Request, res: Response): Promise<void> {
   try {
     const userId = req.user!.userId;
-    const employee = await orgService.getEmployeeByUserId(userId);
+    const userRole = req.user!.role;
+    
+    // Ensure employee record exists (auto-create for HR/Payroll/Admin)
+    const employee = await ensureEmployeeRecord(userId, userRole);
     
     if (!employee) {
       res.status(404).json({
         error: {
           code: 'NOT_FOUND',
-          message: 'Employee not found',
+          message: 'Employee record not found. Please contact admin to create an employee record for you.',
         },
       });
       return;
@@ -609,13 +711,16 @@ export async function stopTimerController(req: Request, res: Response): Promise<
 export async function heartbeatController(req: Request, res: Response): Promise<void> {
   try {
     const userId = req.user!.userId;
-    const employee = await orgService.getEmployeeByUserId(userId);
+    const userRole = req.user!.role;
+    
+    // Ensure employee record exists (auto-create for HR/Payroll/Admin)
+    const employee = await ensureEmployeeRecord(userId, userRole);
     
     if (!employee) {
       res.status(404).json({
         error: {
           code: 'NOT_FOUND',
-          message: 'Employee not found',
+          message: 'Employee record not found. Please contact admin to create an employee record for you.',
         },
       });
       return;
@@ -650,13 +755,16 @@ export async function heartbeatController(req: Request, res: Response): Promise<
 export async function createTimeLogController(req: Request, res: Response): Promise<void> {
   try {
     const userId = req.user!.userId;
-    const employee = await orgService.getEmployeeByUserId(userId);
+    const userRole = req.user!.role;
+    
+    // Ensure employee record exists (auto-create for HR/Payroll/Admin)
+    const employee = await ensureEmployeeRecord(userId, userRole);
     
     if (!employee) {
       res.status(404).json({
         error: {
           code: 'NOT_FOUND',
-          message: 'Employee not found',
+          message: 'Employee record not found. Please contact admin to create an employee record for you.',
         },
       });
       return;
@@ -729,12 +837,13 @@ export async function updateTimeLogController(req: Request, res: Response): Prom
     
     // Role-based access control: Only admin/hr/payroll can update all time logs
     // Employees can only update their own time logs
+    // HR Officer role is 'hr', Payroll Officer role is 'payroll'
     const allowedRolesToSeeAll = ['admin', 'hr', 'payroll'];
     const canSeeAllLogs = allowedRolesToSeeAll.includes(user.role);
     
     if (!canSeeAllLogs) {
       // Verify that the time log belongs to the user's employee record
-      const employee = await orgService.getEmployeeByUserId(user.userId);
+      const employee = await ensureEmployeeRecord(user.userId, user.role);
       if (!employee || employee.id !== existingTimeLog.employeeId) {
         throw new AppError('FORBIDDEN', 'You can only update your own time logs', 403);
       }
@@ -812,12 +921,13 @@ export async function deleteTimeLogController(req: Request, res: Response): Prom
     
     // Role-based access control: Only admin/hr/payroll can delete all time logs
     // Employees can only delete their own time logs
+    // HR Officer role is 'hr', Payroll Officer role is 'payroll'
     const allowedRolesToSeeAll = ['admin', 'hr', 'payroll'];
     const canSeeAllLogs = allowedRolesToSeeAll.includes(user.role);
     
     if (!canSeeAllLogs) {
       // Verify that the time log belongs to the user's employee record
-      const employee = await orgService.getEmployeeByUserId(user.userId);
+      const employee = await ensureEmployeeRecord(user.userId, user.role);
       if (!employee || employee.id !== existingTimeLog.employeeId) {
         throw new AppError('FORBIDDEN', 'You can only delete your own time logs', 403);
       }

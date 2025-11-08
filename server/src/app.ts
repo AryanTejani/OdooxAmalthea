@@ -15,6 +15,7 @@ import activityRoutes from './modules/activity/activity.routes';
 import timeTrackingRoutes from './modules/time-tracking/time-tracking.routes';
 import usersRoutes from './modules/users/users.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import uploadRoutes from './modules/upload/upload.routes';
 import { healthCheck } from './libs/db';
 import { logger } from './config/logger';
 
@@ -59,6 +60,7 @@ app.use('/api/activity', activityRoutes);
 app.use('/api/time-tracking', timeTrackingRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

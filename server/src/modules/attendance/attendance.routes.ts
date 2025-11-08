@@ -18,13 +18,14 @@ router.get('/board', requireManager, attendanceController.getTeamBoardController
 
 // New endpoints (computed from activity_samples)
 // Get attendance day view (admin/hr/payroll only) - replaces /board for day view
+// Payroll Officer role is 'payroll' in the system
 router.get('/day', requireRole(['admin', 'hr', 'payroll']), attendanceV2Controller.getAttendanceDayController);
 
 // Get own attendance month view (any authenticated user) - replaces /me
 router.get('/me', attendanceV2Controller.getAttendanceMeController);
 
 // Get payable summary for payroll (admin/payroll only)
-router.get('/payable-summary', requireRole(['admin', 'manager']), attendanceV2Controller.getPayableSummaryController);
+router.get('/payable-summary', requireRole(['admin', 'payroll']), attendanceV2Controller.getPayableSummaryController);
 
 export default router;
 

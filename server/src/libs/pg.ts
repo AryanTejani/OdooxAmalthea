@@ -8,7 +8,7 @@ let pgClient: Client | null = null;
  * Get or create PostgreSQL client for LISTEN/NOTIFY
  */
 export async function getPgClient(): Promise<Client> {
-  if (pgClient && !pgClient.ended) {
+  if (pgClient && !pgClient.end) {
     return pgClient;
   }
 
@@ -42,7 +42,7 @@ export async function getPgClient(): Promise<Client> {
  * Close PostgreSQL client
  */
 export async function closePgClient(): Promise<void> {
-  if (pgClient && !pgClient.ended) {
+  if (pgClient && !pgClient.end) {
     await pgClient.end();
     pgClient = null;
     logger.info('PostgreSQL client closed');

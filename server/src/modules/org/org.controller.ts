@@ -132,5 +132,3 @@ export async function getEmployeesGridController(req: Request, res: Response): P
     });
   }
 }
-
-

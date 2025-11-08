@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LeaveRequest } from '@/lib/api';
-import { Calendar } from 'lucide-react';
+import { Calendar, FileText, ExternalLink, Download } from 'lucide-react';
 
 interface LeaveTableProps {
   leaves: LeaveRequest[];
@@ -43,6 +43,7 @@ export function LeaveTable({ leaves, onApprove, onReject, showActions = false }:
               <TableHead>Start Date</TableHead>
               <TableHead>End Date</TableHead>
               <TableHead>Reason</TableHead>
+              {showActions && <TableHead>Attachment</TableHead>}
               <TableHead>Status</TableHead>
               {showActions && <TableHead>Actions</TableHead>}
             </TableRow>
@@ -65,7 +66,42 @@ export function LeaveTable({ leaves, onApprove, onReject, showActions = false }:
                   <TableCell>{getTypeBadge(leave.type)}</TableCell>
                   <TableCell>{new Date(leave.startDate).toLocaleDateString()}</TableCell>
                   <TableCell>{new Date(leave.endDate).toLocaleDateString()}</TableCell>
-                  <TableCell>{leave.reason || '-'}</TableCell>
+                  <TableCell className="max-w-xs truncate">{leave.reason || '-'}</TableCell>
+                  {showActions && (
+                    <TableCell>
+                      {leave.attachmentUrl ? (
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(leave.attachmentUrl!, '_blank')}
+                            className="h-7 px-2"
+                          >
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                            View
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = leave.attachmentUrl!;
+                              link.download = '';
+                              link.target = '_blank';
+                              link.click();
+                            }}
+                            className="h-7 px-2"
+                          >
+                            <Download className="h-3 w-3 mr-1" />
+                            Download
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">No attachment</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell>{getStatusBadge(leave.status)}</TableCell>
                   {showActions && leave.status === 'PENDING' && (
                     <TableCell>
@@ -92,7 +128,7 @@ export function LeaveTable({ leaves, onApprove, onReject, showActions = false }:
             ) : (
               <TableRow>
                 <TableCell
-                  colSpan={showActions ? 7 : 5}
+                  colSpan={showActions ? 8 : 5}
                   className="text-center text-muted-foreground"
                 >
                   No leave requests

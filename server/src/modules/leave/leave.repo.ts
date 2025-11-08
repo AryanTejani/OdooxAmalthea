@@ -15,16 +15,17 @@ export async function createLeaveRequest(data: {
   type: LeaveType;
   startDate: Date;
   endDate: Date;
-  reason?: string | null;
+  reason: string;
+  attachmentUrl?: string | null;
 }): Promise<LeaveRequestWithEmployee> {
   const startStr = new Date(data.startDate).toISOString().split('T')[0];
   const endStr = new Date(data.endDate).toISOString().split('T')[0];
   
   const result = await query(
-    `INSERT INTO leave_requests (employee_id, type, start_date, end_date, reason) 
-     VALUES ($1, $2, $3, $4, $5) 
-     RETURNING id, employee_id, type, start_date, end_date, reason, status, approver_id, created_at, updated_at`,
-    [data.employeeId, data.type, startStr, endStr, data.reason || null]
+    `INSERT INTO leave_requests (employee_id, type, start_date, end_date, reason, attachment_url) 
+     VALUES ($1, $2, $3, $4, $5, $6) 
+     RETURNING id, employee_id, type, start_date, end_date, reason, attachment_url, status, approver_id, created_at, updated_at`,
+    [data.employeeId, data.type, startStr, endStr, data.reason, data.attachmentUrl || null]
   );
   
   const row = result.rows[0];
@@ -35,6 +36,7 @@ export async function createLeaveRequest(data: {
     startDate: row.start_date,
     endDate: row.end_date,
     reason: row.reason,
+    attachmentUrl: row.attachment_url,
     status: row.status,
     approverId: row.approver_id,
     createdAt: row.created_at,
@@ -87,7 +89,7 @@ export async function createLeaveRequest(data: {
 export async function getLeaveRequestsByEmployeeId(employeeId: string): Promise<LeaveRequestWithEmployee[]> {
   const result = await query(
     `SELECT 
-       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.status, l.approver_id, l.created_at, l.updated_at,
+       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.attachment_url, l.status, l.approver_id, l.created_at, l.updated_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM leave_requests l
@@ -106,6 +108,7 @@ export async function getLeaveRequestsByEmployeeId(employeeId: string): Promise<
       startDate: row.start_date,
       endDate: row.end_date,
       reason: row.reason,
+      attachmentUrl: row.attachment_url,
       status: row.status,
       approverId: row.approver_id,
       createdAt: row.created_at,
@@ -144,7 +147,7 @@ export async function getLeaveRequestsByEmployeeId(employeeId: string): Promise<
 export async function getPendingLeaveRequests(): Promise<LeaveRequestWithEmployee[]> {
   const result = await query(
     `SELECT 
-       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.status, l.approver_id, l.created_at, l.updated_at,
+       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.attachment_url, l.status, l.approver_id, l.created_at, l.updated_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
        u.name as user_name, u.email as user_email,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
@@ -165,6 +168,7 @@ export async function getPendingLeaveRequests(): Promise<LeaveRequestWithEmploye
       startDate: row.start_date,
       endDate: row.end_date,
       reason: row.reason,
+      attachmentUrl: row.attachment_url,
       status: row.status,
       approverId: row.approver_id,
       createdAt: row.created_at,
@@ -205,7 +209,7 @@ export async function getPendingLeaveRequests(): Promise<LeaveRequestWithEmploye
 export async function getLeaveRequestById(id: string): Promise<LeaveRequestWithEmployee | null> {
   const result = await query(
     `SELECT 
-       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.status, l.approver_id, l.created_at, l.updated_at,
+       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.attachment_url, l.status, l.approver_id, l.created_at, l.updated_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM leave_requests l
@@ -227,6 +231,7 @@ export async function getLeaveRequestById(id: string): Promise<LeaveRequestWithE
     startDate: row.start_date,
     endDate: row.end_date,
     reason: row.reason,
+    attachmentUrl: row.attachment_url,
     status: row.status,
     approverId: row.approver_id,
     createdAt: row.created_at,
@@ -325,6 +330,131 @@ export async function approveLeaveRequest(id: string, approverId: string): Promi
 }
 
 /**
+ * Update leave request (only for PENDING status)
+ */
+export async function updateLeaveRequest(
+  id: string,
+  data: {
+    type?: LeaveType;
+    startDate?: Date;
+    endDate?: Date;
+    reason?: string;
+    attachmentUrl?: string | null;
+  }
+): Promise<LeaveRequestWithEmployee> {
+  // First check if leave exists and is PENDING
+  const existing = await getLeaveRequestById(id);
+  if (!existing) {
+    throw new Error('Leave request not found');
+  }
+  if (existing.status !== 'PENDING') {
+    throw new Error('Can only update pending leave requests');
+  }
+
+  const updates: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  if (data.type !== undefined) {
+    updates.push(`type = $${paramIndex}`);
+    params.push(data.type);
+    paramIndex++;
+  }
+  if (data.startDate !== undefined) {
+    const startStr = new Date(data.startDate).toISOString().split('T')[0];
+    updates.push(`start_date = $${paramIndex}`);
+    params.push(startStr);
+    paramIndex++;
+  }
+  if (data.endDate !== undefined) {
+    const endStr = new Date(data.endDate).toISOString().split('T')[0];
+    updates.push(`end_date = $${paramIndex}`);
+    params.push(endStr);
+    paramIndex++;
+  }
+  if (data.reason !== undefined) {
+    updates.push(`reason = $${paramIndex}`);
+    params.push(data.reason);
+    paramIndex++;
+  }
+  if (data.attachmentUrl !== undefined) {
+    updates.push(`attachment_url = $${paramIndex}`);
+    params.push(data.attachmentUrl || null);
+    paramIndex++;
+  }
+
+  if (updates.length === 0) {
+    // No updates, return existing
+    return existing;
+  }
+
+  updates.push(`updated_at = now()`);
+  params.push(id);
+
+  const result = await query(
+    `UPDATE leave_requests 
+     SET ${updates.join(', ')} 
+     WHERE id = $${paramIndex}
+     RETURNING id, employee_id, type, start_date, end_date, reason, attachment_url, status, approver_id, created_at, updated_at`,
+    params
+  );
+
+  const row = result.rows[0];
+  const leaveRequest: LeaveRequest = {
+    id: row.id,
+    employeeId: row.employee_id,
+    type: row.type,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    reason: row.reason,
+    attachmentUrl: row.attachment_url,
+    status: row.status,
+    approverId: row.approver_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+
+  // Get employee with org unit
+  const empResult = await query(
+    `SELECT 
+       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+       o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
+     FROM employees e
+     LEFT JOIN org_units o ON e.org_unit_id = o.id
+     WHERE e.id = $1`,
+    [row.employee_id]
+  );
+
+  if (empResult.rows.length > 0) {
+    const empRow = empResult.rows[0];
+    const employee: Employee & { orgUnit?: OrgUnit | null } = {
+      id: empRow.id,
+      userId: empRow.user_id,
+      orgUnitId: empRow.org_unit_id,
+      code: empRow.code,
+      title: empRow.title,
+      joinDate: empRow.join_date,
+      createdAt: empRow.created_at,
+      updatedAt: empRow.updated_at,
+    };
+
+    if (empRow.org_id) {
+      employee.orgUnit = {
+        id: empRow.org_id,
+        name: empRow.org_name,
+        parentId: empRow.org_parent_id,
+        createdAt: empRow.org_created_at,
+        updatedAt: empRow.org_updated_at,
+      };
+    }
+
+    return { ...leaveRequest, employee };
+  }
+
+  return leaveRequest;
+}
+
+/**
  * Reject leave request
  */
 export async function rejectLeaveRequest(id: string, approverId: string): Promise<LeaveRequestWithEmployee> {
@@ -395,6 +525,7 @@ export const leaveRepo = {
   getByEmployeeId: getLeaveRequestsByEmployeeId,
   getPending: getPendingLeaveRequests,
   getById: getLeaveRequestById,
+  update: updateLeaveRequest,
   approve: approveLeaveRequest,
   reject: rejectLeaveRequest,
 };

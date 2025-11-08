@@ -40,7 +40,8 @@ export const createLeaveRequestSchema = z.object({
   type: z.enum(['CASUAL', 'SICK', 'UNPAID']),
   startDate: z.string(),
   endDate: z.string(),
-  reason: z.string().optional(),
+  reason: z.string().min(1, 'Reason is required'),
+  attachmentUrl: z.string().url().optional(),
 }).superRefine((data, ctx) => {
   const startDate = new Date(data.startDate);
   const endDate = new Date(data.endDate);
@@ -88,6 +89,63 @@ export const createLeaveRequestSchema = z.object({
     startDate: startDate.toISOString(),
     endDate: endDate.toISOString(),
   };
+});
+
+export const updateLeaveRequestSchema = z.object({
+  type: z.enum(['CASUAL', 'SICK', 'UNPAID']).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  reason: z.string().min(1).optional(),
+  attachmentUrl: z.string().url().optional().or(z.literal('')),
+}).superRefine((data, ctx) => {
+  if (data.startDate && data.endDate) {
+    const startDate = new Date(data.startDate);
+    const endDate = new Date(data.endDate);
+    
+    if (isNaN(startDate.getTime())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid start date',
+        path: ['startDate'],
+      });
+    }
+    
+    if (isNaN(endDate.getTime())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid end date',
+        path: ['endDate'],
+      });
+    }
+    
+    if (endDate < startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'End date must be after start date',
+        path: ['endDate'],
+      });
+    }
+  }
+}).transform((data) => {
+  let result: any = { ...data };
+  
+  if (data.startDate) {
+    let startDateStr = data.startDate;
+    if (startDateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      startDateStr = startDateStr + 'T00:00:00.000Z';
+    }
+    result.startDate = new Date(startDateStr).toISOString();
+  }
+  
+  if (data.endDate) {
+    let endDateStr = data.endDate;
+    if (endDateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      endDateStr = endDateStr + 'T23:59:59.999Z';
+    }
+    result.endDate = new Date(endDateStr).toISOString();
+  }
+  
+  return result;
 });
 
 export const approveLeaveSchema = z.object({
@@ -170,4 +228,10 @@ export const timeLogQuerySchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   billable: z.string().transform((val) => val === 'true').optional(),
+});
+
+// Activity (Audit Log)
+export const activityQuerySchema = z.object({
+  limit: z.string().transform(Number).pipe(z.number().int().positive().max(100)).optional().default('10'),
+  entity: z.string().optional(),
 });

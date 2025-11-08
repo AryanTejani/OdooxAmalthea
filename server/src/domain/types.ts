@@ -5,6 +5,7 @@ import {
   punchInSchema,
   punchOutSchema,
   createLeaveRequestSchema,
+  updateLeaveRequestSchema,
   approveLeaveSchema,
   rejectLeaveSchema,
   generatePayrunSchema,
@@ -15,6 +16,7 @@ export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type PunchInInput = z.infer<typeof punchInSchema>;
 export type PunchOutInput = z.infer<typeof punchOutSchema>;
 export type CreateLeaveRequestInput = z.infer<typeof createLeaveRequestSchema>;
+export type UpdateLeaveRequestInput = z.infer<typeof updateLeaveRequestSchema>;
 export type ApproveLeaveInput = z.infer<typeof approveLeaveSchema>;
 export type RejectLeaveInput = z.infer<typeof rejectLeaveSchema>;
 export type GeneratePayrunInput = z.infer<typeof generatePayrunSchema>;
@@ -109,7 +111,8 @@ export interface LeaveRequest {
   type: LeaveType;
   startDate: Date;
   endDate: Date;
-  reason: string | null;
+  reason: string;
+  attachmentUrl: string | null;
   status: LeaveStatus;
   approverId: string | null;
   createdAt: Date;

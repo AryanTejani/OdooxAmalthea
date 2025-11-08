@@ -1,7 +1,10 @@
 import { leaveRepo } from './leave.repo';
-import { CreateLeaveRequestInput, ApproveLeaveInput, RejectLeaveInput } from '../../domain/types';
+import { CreateLeaveRequestInput, UpdateLeaveRequestInput, ApproveLeaveInput, RejectLeaveInput } from '../../domain/types';
 import { activityRepo } from '../activity/activity.repo';
 import { notifyChannel } from '../../libs/pg';
+import { deleteFromCloudinary } from '../../libs/cloudinary';
+import { logger } from '../../config/logger';
+import { AppError } from '../../middleware/errors';
 
 export const leaveService = {
   async createLeaveRequest(data: CreateLeaveRequestInput, employeeId: string, userId: string) {
@@ -11,6 +14,7 @@ export const leaveService = {
       startDate: new Date(data.startDate),
       endDate: new Date(data.endDate),
       reason: data.reason,
+      attachmentUrl: data.attachmentUrl,
     });
 
     // Log activity
@@ -50,6 +54,87 @@ export const leaveService = {
 
   async getPendingLeaveRequests() {
     return leaveRepo.getPending();
+  },
+
+  async updateLeaveRequest(id: string, data: UpdateLeaveRequestInput, userId: string, employeeId: string) {
+    const existing = await leaveRepo.getById(id);
+    if (!existing) {
+      throw new AppError('NOT_FOUND', 'Leave request not found', 404);
+    }
+
+    // Verify ownership (employee can only update their own leave requests)
+    if (existing.employeeId !== employeeId) {
+      throw new AppError('FORBIDDEN', 'You can only update your own leave requests', 403);
+    }
+
+    if (existing.status !== 'PENDING') {
+      throw new AppError('FORBIDDEN', 'Can only update pending leave requests', 403);
+    }
+
+    // If updating attachment, delete old one from Cloudinary
+    let oldAttachmentUrl = existing.attachmentUrl;
+    if (data.attachmentUrl !== undefined && data.attachmentUrl !== existing.attachmentUrl) {
+      if (oldAttachmentUrl) {
+        try {
+          // Extract public_id from Cloudinary URL
+          // Format: https://res.cloudinary.com/cloud_name/image/upload/v1234567890/folder/filename.jpg
+          const urlParts = oldAttachmentUrl.split('/');
+          const uploadIndex = urlParts.findIndex(part => part === 'upload');
+          if (uploadIndex !== -1 && uploadIndex < urlParts.length - 1) {
+            // Get everything after 'upload' and before the version (if present)
+            const pathAfterUpload = urlParts.slice(uploadIndex + 1);
+            // Remove version if present (starts with 'v')
+            const pathWithoutVersion = pathAfterUpload.filter(part => !part.startsWith('v') || part.length > 20);
+            // Join and remove file extension for public_id
+            const publicId = pathWithoutVersion.join('/').replace(/\.[^/.]+$/, '');
+            if (publicId) {
+              await deleteFromCloudinary(publicId);
+              logger.info({ publicId }, 'Deleted old attachment from Cloudinary');
+            }
+          }
+        } catch (error) {
+          logger.error({ error, oldAttachmentUrl }, 'Failed to delete old attachment from Cloudinary');
+          // Continue with update even if deletion fails
+        }
+      }
+    }
+
+    const updateData: any = {};
+    if (data.type !== undefined) updateData.type = data.type;
+    if (data.startDate !== undefined) updateData.startDate = new Date(data.startDate);
+    if (data.endDate !== undefined) updateData.endDate = new Date(data.endDate);
+    if (data.reason !== undefined) updateData.reason = data.reason;
+    if (data.attachmentUrl !== undefined) {
+      updateData.attachmentUrl = data.attachmentUrl || null;
+    }
+
+    const updated = await leaveRepo.update(id, updateData);
+
+    // Log activity
+    await activityRepo.create({
+      entity: 'leave',
+      refId: id,
+      actorId: userId,
+      action: 'update',
+      meta: {
+        employeeId: existing.employeeId,
+        updatedFields: Object.keys(updateData),
+      },
+    });
+
+    // Emit realtime notification
+    await notifyChannel('realtime', {
+      table: 'leaveRequest',
+      op: 'UPDATE',
+      row: {
+        id: updated.id,
+        employeeId: updated.employeeId,
+        status: updated.status,
+        attachmentUrl: updated.attachmentUrl,
+      },
+    });
+
+    return updated;
   },
 
   async approveLeaveRequest(id: string, data: ApproveLeaveInput) {

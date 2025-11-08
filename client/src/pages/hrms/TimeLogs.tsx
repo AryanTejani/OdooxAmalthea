@@ -42,6 +42,13 @@ function getFirstDayOfMonth(): string {
 
 export function TimeLogs() {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  // HR Officer role is 'hr', Payroll Officer role is 'payroll'
+  const isHRorPayroll = user?.role === 'hr' || user?.role === 'payroll';
+  
+  // For HR/Payroll: Default to showing their own logs
+  // For Admin: Show all logs by default
+  // For Employee: Show only their own logs (handled by backend)
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [startDate, setStartDate] = useState<string>(getFirstDayOfMonth());
@@ -49,11 +56,14 @@ export function TimeLogs() {
     new Date().toISOString().split('T')[0]
   );
   const [billableFilter, setBillableFilter] = useState<string>('all');
+  // For HR/Payroll: Track if they want to see all employees or just their own
+  const [viewAllEmployees, setViewAllEmployees] = useState<boolean>(false);
 
-  // Get all employees
+  // Get all employees (only for admin, HR, and Payroll to filter)
   const { data: employees } = useQuery({
     queryKey: ['employees'],
     queryFn: () => hrmsApi.getAllEmployees(),
+    enabled: isAdmin || isHRorPayroll, // Only fetch if user can see all employees
   });
 
   // Get all projects
@@ -63,15 +73,22 @@ export function TimeLogs() {
   });
 
   // Get time logs with filters
+  // Backend logic:
+  // - Admin: If no employeeId, shows all. If employeeId provided, shows that employee.
+  // - HR/Payroll: If no employeeId and viewAll=true, shows all. If no employeeId and viewAll=false, shows own. If employeeId provided, shows that employee.
+  // - Employee: Always shows their own (backend enforces this).
   const { data: timeLogs, isLoading } = useQuery({
-    queryKey: ['time-logs', 'all', selectedEmployeeId, selectedProjectId, startDate, endDate, billableFilter],
-    queryFn: () => hrmsApi.getTimeLogs({
-      employeeId: selectedEmployeeId || undefined,
-      projectId: selectedProjectId || undefined,
-      startDate,
-      endDate,
-      billable: billableFilter === 'all' ? undefined : billableFilter === 'billable',
-    }),
+    queryKey: ['time-logs', 'all', selectedEmployeeId, selectedProjectId, startDate, endDate, billableFilter, viewAllEmployees, user?.role],
+    queryFn: () => {
+      return hrmsApi.getTimeLogs({
+        employeeId: selectedEmployeeId || undefined,
+        projectId: selectedProjectId || undefined,
+        startDate,
+        endDate,
+        billable: billableFilter === 'all' ? undefined : billableFilter === 'billable',
+        viewAll: isHRorPayroll && !selectedEmployeeId ? viewAllEmployees : undefined, // Only send viewAll for HR/Payroll when no specific employee selected
+      });
+    },
   });
 
   // Calculate statistics
@@ -99,11 +116,13 @@ export function TimeLogs() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-3xl font-bold">Employee Time Logs</h1>
+        <h1 className="text-3xl font-bold">Time Logs</h1>
         <p className="text-muted-foreground mt-1">
-          {user?.role === 'admin' 
-            ? 'View and monitor all employee time tracking (including HR)'
-            : 'View and monitor all employee time tracking'
+          {isAdmin 
+            ? 'View and monitor all employee time logs (including HR and Payroll Officers)'
+            : isHRorPayroll
+            ? 'View your time logs. Use filters to view all employees.'
+            : 'View your time logs'
           }
         </p>
       </div>
@@ -115,25 +134,57 @@ export function TimeLogs() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="employee">Employee</Label>
-              <Select
-                value={selectedEmployeeId || 'all'}
-                onValueChange={(value) => setSelectedEmployeeId(value === 'all' ? '' : value)}
-              >
-                <SelectTrigger id="employee">
-                  <SelectValue placeholder="All Employees" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Employees</SelectItem>
-                  {employees?.map((emp: any) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.userName || emp.code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {(isAdmin || isHRorPayroll) && (
+              <div className="space-y-2">
+                <Label htmlFor="employee">Employee</Label>
+                <Select
+                  value={selectedEmployeeId || (isAdmin ? 'all' : (viewAllEmployees ? 'all' : 'my-logs'))}
+                  onValueChange={(value) => {
+                    if (value === 'all') {
+                      // Admin or HR/Payroll selected "All Employees"
+                      setSelectedEmployeeId('');
+                      if (isHRorPayroll) {
+                        setViewAllEmployees(true);
+                      }
+                    } else if (value === 'my-logs') {
+                      // HR/Payroll selected "My Logs"
+                      setSelectedEmployeeId('');
+                      setViewAllEmployees(false);
+                    } else {
+                      // Specific employee selected
+                      setSelectedEmployeeId(value);
+                      setViewAllEmployees(false);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="employee">
+                    <SelectValue placeholder={isAdmin ? "All Employees" : "My Logs"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isAdmin ? (
+                      <>
+                        <SelectItem value="all">All Employees</SelectItem>
+                        {employees?.map((emp: any) => (
+                          <SelectItem key={emp.id} value={emp.id}>
+                            {emp.userName || emp.code}
+                          </SelectItem>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="my-logs">My Logs (Default)</SelectItem>
+                        <SelectItem value="all">All Employees</SelectItem>
+                        {employees?.map((emp: any) => (
+                          <SelectItem key={emp.id} value={emp.id}>
+                            {emp.userName || emp.code}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="project">Project</Label>
