@@ -102,4 +102,19 @@ export async function getEmployeeByUserIdController(req: Request, res: Response)
   }
 }
 
+export async function getAllEmployeesController(req: Request, res: Response): Promise<void> {
+  try {
+    const employees = await orgService.getAllEmployees();
+    res.json({ data: employees });
+  } catch (error) {
+    logger.error({ error }, 'Failed to get all employees');
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch employees',
+      },
+    });
+  }
+}
+
 
