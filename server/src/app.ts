@@ -42,25 +42,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint
-app.get('/healthz', async (req, res) => {
-  const dbHealthy = await healthCheck();
-  
-  if (dbHealthy) {
-    res.json({
-      status: 'ok',
-      db: 'ok',
-      timestamp: new Date().toISOString(),
-    });
-  } else {
-    res.status(503).json({
-      status: 'error',
-      db: 'error',
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
-
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/auth/google', googleOAuthRoutes);

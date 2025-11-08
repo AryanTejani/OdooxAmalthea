@@ -19,7 +19,6 @@ async function start() {
     // Start server
     const server = app.listen(PORT, () => {
       logger.info(`🚀 Server running on http://localhost:${PORT}`);
-      logger.info(`📊 Health check: http://localhost:${PORT}/healthz`);
       logger.info(`🔐 Environment: ${env.NODE_ENV}`);
     }) as HTTPServer;
 
