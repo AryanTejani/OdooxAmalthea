@@ -76,6 +76,9 @@ export interface User {
   email: string;
   name: string;
   role: string;
+  loginId?: string | null;
+  mustChangePassword?: boolean;
+  phone?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -103,8 +106,16 @@ export const authApi = {
     return response.data.user;
   },
 
-  login: async (data: { email: string; password: string }): Promise<User> => {
-    const response = await api.post<AuthResponse>('/api/auth/login', data);
+  login: async (data: { login: string; password: string }): Promise<{ user: User; mustChangePassword: boolean }> => {
+    const response = await api.post<AuthResponse & { mustChangePassword: boolean }>('/api/auth/login', data);
+    return {
+      user: response.data.user,
+      mustChangePassword: response.data.mustChangePassword,
+    };
+  },
+
+  changePassword: async (data: { currentPassword: string; newPassword: string }): Promise<User> => {
+    const response = await api.post<AuthResponse>('/api/auth/change-password', data);
     return response.data.user;
   },
 
@@ -167,6 +178,18 @@ export interface LeaveRequest {
   approverId?: string;
   createdAt: string;
   updatedAt: string;
+  employee?: {
+    id: string;
+    userId: string;
+    code: string;
+    title?: string;
+    userName?: string;
+    userEmail?: string;
+    orgUnit?: {
+      id: string;
+      name: string;
+    };
+  };
 }
 
 export interface Payrun {
@@ -213,15 +236,21 @@ export const hrmsApi = {
   },
 
   createEmployee: async (data: {
-    userId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    companyName: string;
     orgUnitId?: string;
-    code: string;
     title?: string;
     joinDate: string;
     salaryConfig?: { basic: number; allowances?: Record<string, number> };
-  }): Promise<Employee> => {
-    const response = await api.post<{ data: Employee }>('/api/org/employees', data);
-    return response.data.data;
+  }): Promise<{ employee: Employee; credentials: { loginId: string; tempPassword: string } }> => {
+    const response = await api.post<{ data: Employee; credentials: { loginId: string; tempPassword: string } }>('/api/org/employees', data);
+    return {
+      employee: response.data.data,
+      credentials: response.data.credentials,
+    };
   },
 
   getEmployeeByUserId: async (): Promise<Employee> => {

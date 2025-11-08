@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import * as authService from './auth.service';
-import { registerSchema, loginSchema } from './auth.schemas';
+import { registerSchema, loginSchema, changePasswordSchema } from './auth.schemas';
 import { setAuthCookies, clearAuthCookies } from '../../utils/cookies';
 import { verifyRefreshToken } from '../../utils/jwt';
 import { AppError } from '../../middleware/errors';
+import { requireAuth } from '../../middleware/requireAuth';
 
 /**
  * Register controller
@@ -64,9 +65,48 @@ export async function loginController(
       refreshToken: result.refreshToken,
     });
 
-    // Return user
+    // Return user with mustChangePassword flag
     res.json({
       user: result.user,
+      mustChangePassword: result.mustChangePassword,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Change password controller
+ */
+export async function changePasswordController(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      throw new AppError('UNAUTHORIZED', 'Not authenticated', 401);
+    }
+
+    // Validate input
+    const input = changePasswordSchema.parse(req.body);
+
+    // Get user agent and IP for new session
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || 'unknown';
+
+    // Change password and create new session
+    const result = await authService.changePassword(req.user.userId, input, userAgent, ip);
+
+    // Set new cookies
+    setAuthCookies(res, {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    });
+
+    res.json({
+      user: result.user,
+      message: 'Password changed successfully',
     });
   } catch (error) {
     next(error);

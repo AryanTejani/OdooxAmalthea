@@ -4,6 +4,9 @@ export interface User {
   name: string;
   passwordHash: string | null;
   role: string;
+  loginId: string | null;
+  mustChangePassword: boolean;
+  phone: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,6 +18,9 @@ export type CreateUserInput = {
   name: string;
   passwordHash?: string | null;
   role?: string;
+  loginId?: string | null;
+  mustChangePassword?: boolean;
+  phone?: string | null;
 };
 
 export interface Session {

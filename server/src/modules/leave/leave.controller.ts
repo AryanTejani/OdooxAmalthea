@@ -31,6 +31,7 @@ export async function createLeaveRequestController(req: Request, res: Response):
     res.status(201).json({ data: leave });
   } catch (error) {
     if (error instanceof z.ZodError) {
+      logger.error({ error: error.errors, body: req.body }, 'Leave request validation failed');
       res.status(400).json({
         error: {
           code: 'VALIDATION_ERROR',
@@ -41,7 +42,7 @@ export async function createLeaveRequestController(req: Request, res: Response):
       return;
     }
 
-    logger.error({ error }, 'Failed to create leave request');
+    logger.error({ error, body: req.body }, 'Failed to create leave request');
     const message = error instanceof Error ? error.message : 'Failed to create leave request';
     res.status(400).json({
       error: {

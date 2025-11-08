@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,7 +19,7 @@ import {
 import { GoogleButton } from '@/components/GoogleButton';
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  login: z.string().min(1, 'Login ID or Email is required'),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -50,9 +50,14 @@ export function Login() {
   const onSubmit = async (data: LoginFormData) => {
     try {
       setIsLoading(true);
-      await login(data.email, data.password);
-      toast.success('Logged in successfully!');
-      navigate('/profile');
+      const result = await login(data.login, data.password);
+      if (result.mustChangePassword) {
+        toast.info('Please change your password to continue');
+        navigate('/first-login');
+      } else {
+        toast.success('Logged in successfully!');
+        navigate('/hrms/dashboard');
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Login failed');
     } finally {
@@ -74,16 +79,16 @@ export function Login() {
         <CardContent className="space-y-4">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="login">Login ID / Email</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                {...register('email')}
+                id="login"
+                type="text"
+                placeholder="Login ID or Email"
+                {...register('login')}
                 disabled={isLoading}
               />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
+              {errors.login && (
+                <p className="text-sm text-destructive">{errors.login.message}</p>
               )}
             </div>
 
@@ -121,15 +126,9 @@ export function Login() {
 
           <GoogleButton disabled={isLoading} />
         </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-muted-foreground">
-            Don't have an account?{' '}
-            <Link
-              to="/register"
-              className="text-primary hover:underline font-medium"
-            >
-              Sign up
-            </Link>
+        <CardFooter className="flex flex-col items-center gap-2">
+          <p className="text-sm text-muted-foreground text-center">
+            Accounts are created by HR/Admin. Contact your administrator for access.
           </p>
         </CardFooter>
       </Card>

@@ -7,10 +7,13 @@ import { queryClient } from '@/lib/queryClient';
 import { Login } from '@/pages/Login';
 import { Register } from '@/pages/Register';
 import { Profile } from '@/pages/Profile';
+import { FirstLogin } from '@/pages/FirstLogin';
 import { Dashboard } from '@/pages/hrms/Dashboard';
 import { Attendance } from '@/pages/hrms/Attendance';
 import { Leave } from '@/pages/hrms/Leave';
+import { LeaveApprovals } from '@/pages/hrms/LeaveApprovals';
 import { Payroll } from '@/pages/hrms/Payroll';
+import { Employees } from '@/pages/hrms/Employees';
 
 function App() {
   return (
@@ -21,6 +24,14 @@ function App() {
             <Route path="/" element={<Navigate to="/hrms/dashboard" replace />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route
+              path="/first-login"
+              element={
+                <ProtectedRoute>
+                  <FirstLogin />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/profile"
               element={
@@ -54,10 +65,26 @@ function App() {
               }
             />
             <Route
+              path="/hrms/leave/approvals"
+              element={
+                <ProtectedRoute>
+                  <LeaveApprovals />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/hrms/payroll"
               element={
                 <ProtectedRoute>
                   <Payroll />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/employees"
+              element={
+                <ProtectedRoute>
+                  <Employees />
                 </ProtectedRoute>
               }
             />
