@@ -23,6 +23,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Copy, Check } from 'lucide-react';
 
 const createEmployeeSchema = z.object({
@@ -142,10 +150,17 @@ export function Employees() {
     tempPassword: string;
   }>({ open: false, loginId: '', tempPassword: '' });
 
+  // All authenticated users can view employees
+  const { data: employees } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => hrmsApi.getAllEmployees(),
+    enabled: !!user,
+  });
+
   const { data: orgUnits } = useQuery({
     queryKey: ['orgUnits'],
     queryFn: () => hrmsApi.getOrgUnits(),
-    enabled: !!user,
+    enabled: !!user && (user.role === 'hr' || user.role === 'admin'),
   });
 
   const {
@@ -182,42 +197,64 @@ export function Employees() {
     createMutation.mutate(data);
   };
 
+  // Only HR Officer and Admin can create employees
+  // All users (including employees) can view the employee directory
   const canCreateEmployees = user?.role === 'hr' || user?.role === 'admin';
-
-  if (!canCreateEmployees) {
-    return (
-      <div className="space-y-6 p-6">
-        <h1 className="text-3xl font-bold">Employees</h1>
-        <Card>
-          <CardHeader>
-            <CardTitle>Access Denied</CardTitle>
-            <CardDescription>
-              You don't have permission to view this page.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Employees</h1>
-        <Button onClick={() => setCreateDialogOpen(true)}>Add Employee</Button>
+        <div>
+          <h1 className="text-3xl font-bold">Employee Directory</h1>
+          <p className="text-muted-foreground mt-1">
+            {canCreateEmployees 
+              ? 'Manage employees and create new employee accounts'
+              : 'View employee directory'}
+          </p>
+        </div>
+        {canCreateEmployees && (
+          <Button onClick={() => setCreateDialogOpen(true)}>Add Employee</Button>
+        )}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Employee Management</CardTitle>
+          <CardTitle>Employees</CardTitle>
           <CardDescription>
-            Create new employees with auto-generated login credentials.
+            {canCreateEmployees
+              ? 'Employee directory with management options. Click "Add Employee" to create new accounts.'
+              : 'Browse the employee directory (read-only)'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Click "Add Employee" to create a new employee. The system will automatically generate a login ID and temporary password.
-          </p>
+          {employees && employees.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Employee ID</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Organization Unit</TableHead>
+                  <TableHead>Join Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {employees.map((emp) => (
+                  <TableRow key={emp.id}>
+                    <TableCell className="font-medium">{emp.userName || 'N/A'}</TableCell>
+                    <TableCell>{emp.userEmail || 'N/A'}</TableCell>
+                    <TableCell>{emp.code}</TableCell>
+                    <TableCell>{emp.title || '-'}</TableCell>
+                    <TableCell>{emp.orgUnit?.name || '-'}</TableCell>
+                    <TableCell>{new Date(emp.joinDate).toLocaleDateString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground">No employees found</p>
+          )}
         </CardContent>
       </Card>
 

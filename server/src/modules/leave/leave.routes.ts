@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as leaveController from './leave.controller';
 import { requireAuth } from '../../middleware/requireAuth';
-import { requireManager } from '../../middleware/rbac';
+import { requireLeaveApprover } from '../../middleware/rbac';
 
 const router = Router();
 
@@ -14,14 +14,14 @@ router.post('/', leaveController.createLeaveRequestController);
 // Get my leave requests
 router.get('/mine', leaveController.getMyLeaveRequestsController);
 
-// Get pending leave requests (manager/HR/admin only)
-router.get('/pending', requireManager, leaveController.getPendingLeaveRequestsController);
+// Get pending leave requests (HR Officer, Payroll Officer, Admin only)
+router.get('/pending', requireLeaveApprover, leaveController.getPendingLeaveRequestsController);
 
-// Approve leave request
-router.post('/:id/approve', requireManager, leaveController.approveLeaveRequestController);
+// Approve leave request (HR Officer, Payroll Officer, Admin only)
+router.post('/:id/approve', requireLeaveApprover, leaveController.approveLeaveRequestController);
 
-// Reject leave request
-router.post('/:id/reject', requireManager, leaveController.rejectLeaveRequestController);
+// Reject leave request (HR Officer, Payroll Officer, Admin only)
+router.post('/:id/reject', requireLeaveApprover, leaveController.rejectLeaveRequestController);
 
 export default router;
 

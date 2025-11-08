@@ -9,20 +9,11 @@ import { Label } from '@/components/ui/label';
 import { hrmsApi, getErrorMessage } from '@/lib/api';
 import { toast } from 'sonner';
 import { useWS } from '@/hooks/useWS';
-import { Navigate } from 'react-router-dom';
-
 export function LeaveApprovals() {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [selectedLeaveId, setSelectedLeaveId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
-
-  // Redirect if user doesn't have permission
-  const canManageLeaves = user?.role === 'hr' || user?.role === 'manager' || user?.role === 'admin';
-  if (!canManageLeaves) {
-    return <Navigate to="/hrms/leave" replace />;
-  }
 
   const { data: pendingLeaves } = useQuery({
     queryKey: ['leave', 'pending'],

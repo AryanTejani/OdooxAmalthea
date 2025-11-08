@@ -1,26 +1,30 @@
 import { Router } from 'express';
 import * as payrollController from './payroll.controller';
 import { requireAuth } from '../../middleware/requireAuth';
-import { requireHR } from '../../middleware/rbac';
+import { requirePayrollOfficer } from '../../middleware/rbac';
 
 const router = Router();
 
 // All routes require authentication
 router.use(requireAuth);
 
-// Generate payrun (HR/admin only)
-router.post('/generate', requireHR, payrollController.generatePayrunController);
+// All payroll routes require Payroll Officer or Admin
+// Employees and HR Officers cannot access payroll
+router.use(requirePayrollOfficer);
 
-// Get payruns
+// Generate payrun (Payroll Officer/Admin only)
+router.post('/generate', payrollController.generatePayrunController);
+
+// Get payruns (Payroll Officer/Admin only)
 router.get('/payruns', payrollController.getPayrunsController);
 
-// Finalize payrun (HR/admin only)
-router.post('/:payrunId/finalize', requireHR, payrollController.finalizePayrunController);
+// Finalize payrun (Payroll Officer/Admin only)
+router.post('/:payrunId/finalize', payrollController.finalizePayrunController);
 
-// Get payslips by payrun
+// Get payslips by payrun (Payroll Officer/Admin only)
 router.get('/:payrunId/payslips', payrollController.getPayslipsByPayrunIdController);
 
-// Get payslip by ID
+// Get payslip by ID (Payroll Officer/Admin only)
 router.get('/payslip/:id', payrollController.getPayslipByIdController);
 
 export default router;

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as orgController from './org.controller';
 import { requireAuth } from '../../middleware/requireAuth';
-import { requireAdmin, requireHR } from '../../middleware/rbac';
+import { requireAdmin, requireHROfficer } from '../../middleware/rbac';
 
 const router = Router();
 
@@ -14,11 +14,14 @@ router.get('/units', orgController.getOrgUnitsController);
 // Create org unit (admin only)
 router.post('/units', requireAdmin, orgController.createOrgUnitController);
 
-// Create employee (HR/admin only)
-router.post('/employees', requireHR, orgController.createEmployeeController);
+// Create employee (HR Officer/Admin only)
+router.post('/employees', requireHROfficer, orgController.createEmployeeController);
 
 // Get employee by user ID
 router.get('/employees/me', orgController.getEmployeeByUserIdController);
+
+// Get all employees (all authenticated users can view employee directory)
+router.get('/employees', orgController.getAllEmployeesController);
 
 export default router;
 

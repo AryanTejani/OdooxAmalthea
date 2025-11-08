@@ -55,4 +55,20 @@ export const requireHR = requireRole(['admin', 'hr']);
  */
 export const requireManager = requireRole(['admin', 'hr', 'manager']);
 
+/**
+ * Convenience middleware for Payroll Officer (manager) and admin only
+ * Payroll Officer can approve/reject leave requests, manage payroll
+ */
+export const requirePayrollOfficer = requireRole(['admin', 'manager']);
+
+/**
+ * Convenience middleware for HR Officer and admin only
+ */
+export const requireHROfficer = requireRole(['admin', 'hr']);
+
+/**
+ * Convenience middleware for leave approvals (HR Officer, Payroll Officer, Admin)
+ */
+export const requireLeaveApprover = requireRole(['admin', 'hr', 'manager']);
+
 

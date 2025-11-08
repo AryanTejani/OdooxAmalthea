@@ -71,6 +71,7 @@ export function Leave() {
     createMutation.mutate(data);
   };
 
+  // HR Officer, Payroll Officer (manager), and Admin can approve leaves
   const canManageLeaves = user?.role === 'hr' || user?.role === 'manager' || user?.role === 'admin';
 
   return (

@@ -3,6 +3,8 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { AuthProvider } from '@/auth/AuthContext';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
+import { RoleProtectedRoute } from '@/auth/RoleProtectedRoute';
+import { HRMSLayout } from '@/components/hrms/HRMSLayout';
 import { queryClient } from '@/lib/queryClient';
 import { Login } from '@/pages/Login';
 import { Register } from '@/pages/Register';
@@ -36,7 +38,9 @@ function App() {
               path="/profile"
               element={
                 <ProtectedRoute>
-                  <Profile />
+                  <HRMSLayout>
+                    <Profile />
+                  </HRMSLayout>
                 </ProtectedRoute>
               }
             />
@@ -44,7 +48,9 @@ function App() {
               path="/hrms/dashboard"
               element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <HRMSLayout>
+                    <Dashboard />
+                  </HRMSLayout>
                 </ProtectedRoute>
               }
             />
@@ -52,7 +58,9 @@ function App() {
               path="/hrms/attendance"
               element={
                 <ProtectedRoute>
-                  <Attendance />
+                  <HRMSLayout>
+                    <Attendance />
+                  </HRMSLayout>
                 </ProtectedRoute>
               }
             />
@@ -60,31 +68,39 @@ function App() {
               path="/hrms/leave"
               element={
                 <ProtectedRoute>
-                  <Leave />
+                  <HRMSLayout>
+                    <Leave />
+                  </HRMSLayout>
                 </ProtectedRoute>
               }
             />
             <Route
               path="/hrms/leave/approvals"
               element={
-                <ProtectedRoute>
-                  <LeaveApprovals />
-                </ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['admin', 'hr', 'manager']} feature="Leave Approvals">
+                  <HRMSLayout>
+                    <LeaveApprovals />
+                  </HRMSLayout>
+                </RoleProtectedRoute>
               }
             />
             <Route
               path="/hrms/payroll"
               element={
-                <ProtectedRoute>
-                  <Payroll />
-                </ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['admin', 'manager']} feature="Payroll">
+                  <HRMSLayout>
+                    <Payroll />
+                  </HRMSLayout>
+                </RoleProtectedRoute>
               }
             />
             <Route
               path="/hrms/employees"
               element={
                 <ProtectedRoute>
-                  <Employees />
+                  <HRMSLayout>
+                    <Employees />
+                  </HRMSLayout>
                 </ProtectedRoute>
               }
             />

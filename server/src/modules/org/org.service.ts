@@ -156,6 +156,10 @@ export const orgService = {
   async getEmployeesByOrgUnit(orgUnitId: string) {
     return orgRepo.getEmployeesByOrgUnit(orgUnitId);
   },
+
+  async getAllEmployees() {
+    return orgRepo.getAllEmployees();
+  },
 };
 
 

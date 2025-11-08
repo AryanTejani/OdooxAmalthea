@@ -154,6 +154,9 @@ export interface Employee {
   joinDate: string;
   createdAt: string;
   updatedAt: string;
+  orgUnit?: OrgUnit | null;
+  userName?: string;
+  userEmail?: string;
 }
 
 export interface Attendance {
@@ -255,6 +258,11 @@ export const hrmsApi = {
 
   getEmployeeByUserId: async (): Promise<Employee> => {
     const response = await api.get<{ data: Employee }>('/api/org/employees/me');
+    return response.data.data;
+  },
+
+  getAllEmployees: async (): Promise<Employee[]> => {
+    const response = await api.get<{ data: Employee[] }>('/api/org/employees');
     return response.data.data;
   },
 

@@ -1,7 +1,4 @@
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { useAuth } from '@/auth/AuthContext';
-import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -9,21 +6,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { LogOut, Mail, User, Shield } from 'lucide-react';
+import { Mail, User, Shield } from 'lucide-react';
 
 export function Profile() {
-  const navigate = useNavigate();
-  const { user, logout, loading } = useAuth();
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      toast.success('Logged out successfully');
-      navigate('/login');
-    } catch (error) {
-      toast.error('Logout failed');
-    }
-  };
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -38,18 +24,10 @@ export function Profile() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-violet-50 to-violet-100 p-4">
-      <div className="container max-w-2xl mx-auto py-8">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-foreground">Profile</h1>
-          <Button
-            variant="outline"
-            onClick={handleLogout}
-            className="flex items-center gap-2"
-          >
-            <LogOut className="h-4 w-4" />
-            Logout
-          </Button>
+    <div className="p-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Profile</h1>
         </div>
 
         <Card>
