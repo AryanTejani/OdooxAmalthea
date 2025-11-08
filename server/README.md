@@ -131,12 +131,6 @@ All authenticated endpoints require an `access_token` cookie. Tokens are automat
 
 ---
 
-## 🔐 Endpoints
-
-### Health Check
-
-**GET** `/healthz`
-
 Check server and database health.
 
 **Response**

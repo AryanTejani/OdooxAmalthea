@@ -338,6 +338,95 @@ export const hrmsApi = {
     return response.data.data;
   },
 
+  // Attendance v2 (computed from activity_samples)
+  getAttendanceDay: async (date?: string, search?: string): Promise<Array<{
+    employee_id: string;
+    name: string;
+    login_id: string | null;
+    in_at: string | null;
+    out_at: string | null;
+    work_hours: number;
+    extra_hours: number;
+  }>> => {
+    const params: Record<string, string> = {};
+    if (date) params.date = date;
+    if (search) params.q = search;
+    const response = await api.get<{ data: Array<{
+      employee_id: string;
+      name: string;
+      login_id: string | null;
+      in_at: string | null;
+      out_at: string | null;
+      work_hours: number;
+      extra_hours: number;
+    }> }>('/api/attendance/day', { params });
+    return response.data.data;
+  },
+
+  getAttendanceMe: async (month?: string): Promise<{
+    days: Array<{
+      date: string;
+      in_at: string | null;
+      out_at: string | null;
+      work_hours: number;
+      extra_hours: number;
+      leave_type: string | null;
+      payable: boolean;
+    }>;
+    kpi: {
+      present_days: number;
+      leave_days: number;
+      unpaid_leave_days: number;
+      total_working_days: number;
+      payable_days: number;
+    };
+  }> => {
+    const params = month ? { month } : {};
+    const response = await api.get<{ data: {
+      days: Array<{
+        date: string;
+        in_at: string | null;
+        out_at: string | null;
+        work_hours: number;
+        extra_hours: number;
+        leave_type: string | null;
+        payable: boolean;
+      }>;
+      kpi: {
+        present_days: number;
+        leave_days: number;
+        unpaid_leave_days: number;
+        total_working_days: number;
+        payable_days: number;
+      };
+    } }>('/api/attendance/me', { params });
+    return response.data.data;
+  },
+
+  getPayableSummary: async (month?: string): Promise<Array<{
+    employee_id: string;
+    name: string;
+    login_id: string | null;
+    present_days: number;
+    paid_leave_days: number;
+    unpaid_leave_days: number;
+    payable_days: number;
+    total_working_days: number;
+  }>> => {
+    const params = month ? { month } : {};
+    const response = await api.get<{ data: Array<{
+      employee_id: string;
+      name: string;
+      login_id: string | null;
+      present_days: number;
+      paid_leave_days: number;
+      unpaid_leave_days: number;
+      payable_days: number;
+      total_working_days: number;
+    }> }>('/api/attendance/payable-summary', { params });
+    return response.data.data;
+  },
+
   // Leave
   createLeaveRequest: async (data: {
     type: 'CASUAL' | 'SICK' | 'UNPAID';

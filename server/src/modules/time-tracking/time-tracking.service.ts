@@ -247,43 +247,59 @@ export const timeTrackingService = {
     return updated;
   },
 
-  async heartbeat(employeeId: string, userId: string) {
+  async heartbeat(employeeId: string, userId: string, idleMs: number = 0) {
     // Check if there's an active timer
     const activeTimer = await timeTrackingRepo.getActiveTimeLog(employeeId);
     if (!activeTimer) {
       throw new Error('No active timer found.');
     }
     
-    // Update attendance to keep it active (refresh in_at if needed, but don't change it)
-    // This acts as a heartbeat to show the employee is still active
+    // Insert/update activity sample for current minute
     try {
-      // Get today's attendance
-      const { attendanceRepo } = await import('../attendance/attendance.repo');
-      const todayAttendance = await attendanceRepo.getTodayByEmployeeId(employeeId);
+      const { query } = await import('../../libs/db');
+      const now = new Date();
+      // Truncate to minute (set seconds and milliseconds to 0)
+      const minuteStart = new Date(now);
+      minuteStart.setSeconds(0, 0);
       
-      // If attendance exists and has inAt but no outAt, update the updated_at timestamp
-      // This will be used to determine "Idle" status (no activity in last X minutes)
-      if (todayAttendance && todayAttendance.inAt && !todayAttendance.outAt) {
-        // Update the updated_at timestamp to track last activity
-        const { query } = await import('../../libs/db');
-        await query(
-          `UPDATE attendance SET updated_at = NOW() WHERE id = $1`,
-          [todayAttendance.id]
-        );
+      // Upsert activity sample
+      await query(
+        `INSERT INTO activity_samples (employee_id, minute_start, idle_ms)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (employee_id, minute_start)
+         DO UPDATE SET idle_ms = $3, created_at = now()`,
+        [employeeId, minuteStart, Math.max(0, Math.min(60000, idleMs))]
+      );
+      
+      // Update attendance in_at/out_at from activity samples
+      const { attendanceRepo } = await import('../attendance/attendance.repo');
+      const { getInOutTimes } = await import('../attendance/attendance.helpers');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { inAt, outAt } = await getInOutTimes(employeeId, today);
+      
+      if (inAt) {
+        await attendanceRepo.createOrUpdateToday({
+          employeeId,
+          inAt,
+          outAt: outAt || undefined,
+          status: 'PRESENT',
+        });
         
         // Notify realtime
         await notifyChannel('realtime', {
-          table: 'attendance',
+          table: 'activity_samples',
           op: 'UPDATE',
           row: {
-            id: todayAttendance.id,
-            employeeId: todayAttendance.employeeId,
-            updatedAt: new Date().toISOString(),
+            employeeId,
+            minuteStart: minuteStart.toISOString(),
+            idleMs,
           },
         });
       }
     } catch (error) {
-      logger.error({ error, employeeId }, 'Failed to update attendance heartbeat');
+      logger.error({ error, employeeId }, 'Failed to update activity sample');
       // Don't throw error, heartbeat is best-effort
     }
     

@@ -13,6 +13,8 @@ import { FirstLogin } from '@/pages/FirstLogin';
 import { Landing } from '@/pages/hrms/Landing';
 import { Dashboard } from '@/pages/hrms/Dashboard';
 import { Attendance } from '@/pages/hrms/Attendance';
+import { AttendanceAdmin } from '@/pages/hrms/AttendanceAdmin';
+import { AttendanceMe } from '@/pages/hrms/AttendanceMe';
 import { Leave } from '@/pages/hrms/Leave';
 import { LeaveApprovals } from '@/pages/hrms/LeaveApprovals';
 import { Payroll } from '@/pages/hrms/Payroll';
@@ -72,9 +74,19 @@ function App() {
               element={
                 <ProtectedRoute>
                   <HRMSLayout>
-                    <Attendance />
+                    <AttendanceMe />
                   </HRMSLayout>
                 </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/hrms/attendance/admin"
+              element={
+                <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']} feature="Attendance Admin">
+                  <HRMSLayout>
+                    <AttendanceAdmin />
+                  </HRMSLayout>
+                </RoleProtectedRoute>
               }
             />
             <Route

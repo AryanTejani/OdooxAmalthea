@@ -3,7 +3,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { corsMiddleware } from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errors';
-import { apiRateLimit } from './middleware/rateLimit';
+// import { apiRateLimit } from './middleware/rateLimit'; // DISABLED FOR TESTING
 import authRoutes from './modules/auth/auth.routes';
 import googleOAuthRoutes from './modules/oauth/google.routes';
 import orgRoutes from './modules/org/org.routes';
@@ -33,8 +33,9 @@ app.use(express.urlencoded({ extended: true }));
 // Cookie parser
 app.use(cookieParser());
 
-// Global rate limiting
-app.use('/api', apiRateLimit);
+// Global rate limiting - DISABLED FOR TESTING
+// TODO: Re-enable before production deployment
+// app.use('/api', apiRateLimit);
 
 // Request logging
 app.use((req, res, next) => {

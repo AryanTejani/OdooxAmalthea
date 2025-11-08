@@ -39,6 +39,13 @@ const navItems: NavItem[] = [
     icon: Clock,
   },
   {
+    title: 'Attendance (Admin)',
+    href: '/hrms/attendance/admin',
+    icon: Clock,
+    roles: ['admin', 'hr', 'payroll'],
+    badge: 'Admin/HR',
+  },
+  {
     title: 'Time Tracker',
     href: '/hrms/time-tracker',
     icon: Timer,

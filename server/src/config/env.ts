@@ -15,6 +15,11 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),
   OAUTH_ALLOWED_REDIRECTS: z.string().min(1),
+  // Attendance configuration
+  WORK_HOURS_PER_DAY: z.string().transform(Number).pipe(z.number().positive()).default('8'),
+  IDLE_BREAK_THRESHOLD_MIN: z.string().transform(Number).pipe(z.number().positive()).default('15'),
+  MIN_ACTIVE_HOURS_PRESENT: z.string().transform(Number).pipe(z.number().nonnegative()).default('4'),
+  WORK_WEEK_MON_TO_FRI: z.string().transform((val) => val === 'true').default('true'),
 });
 
 export type Env = z.infer<typeof envSchema>;

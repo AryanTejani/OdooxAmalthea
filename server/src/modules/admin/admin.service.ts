@@ -1,6 +1,7 @@
 import * as adminRepo from './admin.repo';
 import { notifyChannel } from '../../libs/pg';
 import { AppError } from '../../middleware/errors';
+import { revokeAllUserSessions } from '../auth/auth.repo';
 
 export interface AdminUser {
   id: string;
@@ -37,6 +38,10 @@ export async function updateUserRole(
 
   // Update role
   const updatedUser = await adminRepo.updateUserRole(userId, newRole);
+
+  // Revoke all sessions for this user to force re-login with new role
+  // This ensures JWT tokens reflect the new role immediately
+  await revokeAllUserSessions(userId);
 
   // Emit NOTIFY for realtime updates
   await notifyChannel('realtime', {

@@ -12,6 +12,7 @@ import {
   startTimerSchema,
 } from '../../domain/schemas';
 import { logger } from '../../config/logger';
+import { AppError } from '../../middleware/errors';
 import { z } from 'zod';
 
 // ============= PROJECTS =============
@@ -349,13 +350,16 @@ export async function getTimeLogsController(req: Request, res: Response): Promis
     const user = req.user!;
     
     // Role-based filtering:
-    // - Employees: can only see their own time logs
-    // - HR/Admin: can see all employees' time logs (unless filtered by employeeId)
+    // - Only admin, hr, and payroll can see all employees' time logs
+    // - All other roles (including employee) can only see their own time logs
+    const allowedRolesToSeeAll = ['admin', 'hr', 'payroll'];
+    const canSeeAllLogs = allowedRolesToSeeAll.includes(user.role);
+    
     let employeeId = query.employeeId;
     
     if (!employeeId) {
-      // If user is employee (not HR/Admin), restrict to their own logs
-      if (user.role === 'employee') {
+      if (!canSeeAllLogs) {
+        // User is not admin/hr/payroll, restrict to their own logs
         const employee = await orgService.getEmployeeByUserId(user.userId);
         if (employee) {
           employeeId = employee.id;
@@ -365,7 +369,16 @@ export async function getTimeLogsController(req: Request, res: Response): Promis
           return;
         }
       }
-      // If user is HR or Admin, employeeId remains undefined (shows all employees)
+      // If user is admin/hr/payroll, employeeId remains undefined (shows all employees)
+    } else {
+      // If employeeId is explicitly provided in query, verify access
+      if (!canSeeAllLogs) {
+        // Non-admin/hr/payroll users can only query their own employeeId
+        const employee = await orgService.getEmployeeByUserId(user.userId);
+        if (!employee || employee.id !== employeeId) {
+          throw new AppError('FORBIDDEN', 'You can only view your own time logs', 403);
+        }
+      }
     }
     
     const timeLogs = await timeTrackingService.getTimeLogs({
@@ -375,6 +388,16 @@ export async function getTimeLogsController(req: Request, res: Response): Promis
     
     res.json({ data: timeLogs });
   } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
+      return;
+    }
+    
     if (error instanceof z.ZodError) {
       res.status(400).json({
         error: {
@@ -399,6 +422,7 @@ export async function getTimeLogsController(req: Request, res: Response): Promis
 export async function getTimeLogByIdController(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
+    const user = req.user!;
     const timeLog = await timeTrackingService.getTimeLogById(id);
     
     if (!timeLog) {
@@ -411,8 +435,31 @@ export async function getTimeLogByIdController(req: Request, res: Response): Pro
       return;
     }
     
+    // Role-based access control: Only admin/hr/payroll can see all time logs
+    // Employees can only see their own time logs
+    const allowedRolesToSeeAll = ['admin', 'hr', 'payroll'];
+    const canSeeAllLogs = allowedRolesToSeeAll.includes(user.role);
+    
+    if (!canSeeAllLogs) {
+      // Verify that the time log belongs to the user's employee record
+      const employee = await orgService.getEmployeeByUserId(user.userId);
+      if (!employee || employee.id !== timeLog.employeeId) {
+        throw new AppError('FORBIDDEN', 'You can only view your own time logs', 403);
+      }
+    }
+    
     res.json({ data: timeLog });
   } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
+      return;
+    }
+    
     logger.error({ error }, 'Failed to get time log');
     res.status(500).json({
       error: {
@@ -574,7 +621,10 @@ export async function heartbeatController(req: Request, res: Response): Promise<
       return;
     }
     
-    const result = await timeTrackingService.heartbeat(employee.id, userId);
+    // Get idleMs from request body (optional, defaults to 0)
+    const idleMs = req.body?.idleMs || 0;
+    
+    const result = await timeTrackingService.heartbeat(employee.id, userId, idleMs);
     res.json({ data: result });
   } catch (error) {
     if (error instanceof Error && error.message.includes('No active timer')) {
@@ -661,7 +711,34 @@ export async function createTimeLogController(req: Request, res: Response): Prom
 export async function updateTimeLogController(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
+    const user = req.user!;
     const input = updateTimeLogSchema.parse(req.body);
+    
+    // First, get the time log to check ownership
+    const existingTimeLog = await timeTrackingService.getTimeLogById(id);
+    
+    if (!existingTimeLog) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Time log not found',
+        },
+      });
+      return;
+    }
+    
+    // Role-based access control: Only admin/hr/payroll can update all time logs
+    // Employees can only update their own time logs
+    const allowedRolesToSeeAll = ['admin', 'hr', 'payroll'];
+    const canSeeAllLogs = allowedRolesToSeeAll.includes(user.role);
+    
+    if (!canSeeAllLogs) {
+      // Verify that the time log belongs to the user's employee record
+      const employee = await orgService.getEmployeeByUserId(user.userId);
+      if (!employee || employee.id !== existingTimeLog.employeeId) {
+        throw new AppError('FORBIDDEN', 'You can only update your own time logs', 403);
+      }
+    }
     
     const timeLog = await timeTrackingService.updateTimeLog(id, {
       taskId: input.taskId,
@@ -684,6 +761,16 @@ export async function updateTimeLogController(req: Request, res: Response): Prom
     
     res.json({ data: timeLog });
   } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
+      return;
+    }
+    
     if (error instanceof z.ZodError) {
       res.status(400).json({
         error: {
@@ -708,6 +795,34 @@ export async function updateTimeLogController(req: Request, res: Response): Prom
 export async function deleteTimeLogController(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
+    const user = req.user!;
+    
+    // First, get the time log to check ownership
+    const existingTimeLog = await timeTrackingService.getTimeLogById(id);
+    
+    if (!existingTimeLog) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Time log not found',
+        },
+      });
+      return;
+    }
+    
+    // Role-based access control: Only admin/hr/payroll can delete all time logs
+    // Employees can only delete their own time logs
+    const allowedRolesToSeeAll = ['admin', 'hr', 'payroll'];
+    const canSeeAllLogs = allowedRolesToSeeAll.includes(user.role);
+    
+    if (!canSeeAllLogs) {
+      // Verify that the time log belongs to the user's employee record
+      const employee = await orgService.getEmployeeByUserId(user.userId);
+      if (!employee || employee.id !== existingTimeLog.employeeId) {
+        throw new AppError('FORBIDDEN', 'You can only delete your own time logs', 403);
+      }
+    }
+    
     const deleted = await timeTrackingService.deleteTimeLog(id);
     
     if (!deleted) {
@@ -722,6 +837,16 @@ export async function deleteTimeLogController(req: Request, res: Response): Prom
     
     res.json({ message: 'Time log deleted successfully' });
   } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
+      return;
+    }
+    
     logger.error({ error }, 'Failed to delete time log');
     res.status(500).json({
       error: {
