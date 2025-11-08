@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 import { LeaveTable } from '@/components/hrms/LeaveTable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -7,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { hrmsApi, getErrorMessage } from '@/lib/api';
 import { toast } from 'sonner';
 import { useWS } from '@/hooks/useWS';
@@ -30,20 +30,13 @@ const leaveRequestSchema = z.object({
 type LeaveRequestForm = z.infer<typeof leaveRequestSchema>;
 
 export function Leave() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [newLeaveOpen, setNewLeaveOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('mine');
-
   const { data: myLeaves } = useQuery({
     queryKey: ['leave', 'mine'],
     queryFn: () => hrmsApi.getMyLeaveRequests(),
-  });
-
-  const { data: pendingLeaves } = useQuery({
-    queryKey: ['leave', 'pending'],
-    queryFn: () => hrmsApi.getPendingLeaveRequests(),
-    enabled: user?.role === 'hr' || user?.role === 'manager' || user?.role === 'admin',
   });
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<LeaveRequestForm>({
@@ -73,27 +66,6 @@ export function Leave() {
     },
   });
 
-  const approveMutation = useMutation({
-    mutationFn: (id: string) => hrmsApi.approveLeaveRequest(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leave'] });
-      toast.success('Leave request approved!');
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error));
-    },
-  });
-
-  const rejectMutation = useMutation({
-    mutationFn: (id: string) => hrmsApi.rejectLeaveRequest(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leave'] });
-      toast.success('Leave request rejected!');
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error));
-    },
-  });
 
   const onSubmit = (data: LeaveRequestForm) => {
     createMutation.mutate(data);
@@ -105,28 +77,17 @@ export function Leave() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Leave Management</h1>
-        <Button onClick={() => setNewLeaveOpen(true)}>New Leave Request</Button>
+        <div className="flex gap-2">
+          {canManageLeaves && (
+            <Button variant="outline" onClick={() => navigate('/hrms/leave/approvals')}>
+              View Approvals
+            </Button>
+          )}
+          <Button onClick={() => setNewLeaveOpen(true)}>New Leave Request</Button>
+        </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="mine">My Requests</TabsTrigger>
-          {canManageLeaves && <TabsTrigger value="pending">Pending Approvals</TabsTrigger>}
-        </TabsList>
-        <TabsContent value="mine">
-          <LeaveTable leaves={myLeaves || []} />
-        </TabsContent>
-        {canManageLeaves && (
-          <TabsContent value="pending">
-            <LeaveTable
-              leaves={pendingLeaves || []}
-              onApprove={(id) => approveMutation.mutate(id)}
-              onReject={(id) => rejectMutation.mutate(id)}
-              showActions
-            />
-          </TabsContent>
-        )}
-      </Tabs>
+      <LeaveTable leaves={myLeaves || []} />
 
       <Dialog open={newLeaveOpen} onOpenChange={setNewLeaveOpen}>
         <DialogContent>
@@ -164,6 +125,7 @@ export function Leave() {
           </form>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }

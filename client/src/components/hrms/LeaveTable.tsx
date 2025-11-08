@@ -38,6 +38,7 @@ export function LeaveTable({ leaves, onApprove, onReject, showActions = false }:
         <Table>
           <TableHeader>
             <TableRow>
+              {showActions && <TableHead>Employee</TableHead>}
               <TableHead>Type</TableHead>
               <TableHead>Start Date</TableHead>
               <TableHead>End Date</TableHead>
@@ -50,6 +51,17 @@ export function LeaveTable({ leaves, onApprove, onReject, showActions = false }:
             {leaves.length > 0 ? (
               leaves.map((leave) => (
                 <TableRow key={leave.id}>
+                  {showActions && (
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{leave.employee?.userName || 'Unknown'}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {leave.employee?.code || leave.employeeId}
+                          {leave.employee?.orgUnit && ` • ${leave.employee.orgUnit.name}`}
+                        </span>
+                      </div>
+                    </TableCell>
+                  )}
                   <TableCell>{getTypeBadge(leave.type)}</TableCell>
                   <TableCell>{new Date(leave.startDate).toLocaleDateString()}</TableCell>
                   <TableCell>{new Date(leave.endDate).toLocaleDateString()}</TableCell>
@@ -80,7 +92,7 @@ export function LeaveTable({ leaves, onApprove, onReject, showActions = false }:
             ) : (
               <TableRow>
                 <TableCell
-                  colSpan={showActions ? 6 : 5}
+                  colSpan={showActions ? 7 : 5}
                   className="text-center text-muted-foreground"
                 >
                   No leave requests

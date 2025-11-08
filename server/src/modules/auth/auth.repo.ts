@@ -7,7 +7,7 @@ import { User, Session, SessionWithUser, UserWithoutPassword, CreateUserInput } 
  */
 export async function findUserByEmail(email: string): Promise<User | null> {
   const result = await query(
-    'SELECT id, email, name, password_hash, role, created_at, updated_at FROM users WHERE email = $1',
+    'SELECT id, email, name, password_hash, role, login_id, must_change_password, phone, created_at, updated_at FROM users WHERE email = $1',
     [email.toLowerCase()]
   );
   
@@ -22,9 +22,54 @@ export async function findUserByEmail(email: string): Promise<User | null> {
     name: row.name,
     passwordHash: row.password_hash,
     role: row.role,
+    loginId: row.login_id,
+    mustChangePassword: row.must_change_password,
+    phone: row.phone,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/**
+ * Find user by login_id
+ */
+export async function findUserByLoginId(loginId: string): Promise<User | null> {
+  const result = await query(
+    'SELECT id, email, name, password_hash, role, login_id, must_change_password, phone, created_at, updated_at FROM users WHERE login_id = $1',
+    [loginId.toUpperCase()]
+  );
+  
+  if (result.rows.length === 0) {
+    return null;
+  }
+  
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    passwordHash: row.password_hash,
+    role: row.role,
+    loginId: row.login_id,
+    mustChangePassword: row.must_change_password,
+    phone: row.phone,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Find user by email or login_id
+ */
+export async function findUserByEmailOrLoginId(login: string): Promise<User | null> {
+  // Try email first
+  const userByEmail = await findUserByEmail(login);
+  if (userByEmail) {
+    return userByEmail;
+  }
+  
+  // Try login_id
+  return findUserByLoginId(login);
 }
 
 /**
@@ -32,7 +77,7 @@ export async function findUserByEmail(email: string): Promise<User | null> {
  */
 export async function findUserById(id: string): Promise<User | null> {
   const result = await query(
-    'SELECT id, email, name, password_hash, role, created_at, updated_at FROM users WHERE id = $1',
+    'SELECT id, email, name, password_hash, role, login_id, must_change_password, phone, created_at, updated_at FROM users WHERE id = $1',
     [id]
   );
   
@@ -47,6 +92,9 @@ export async function findUserById(id: string): Promise<User | null> {
     name: row.name,
     passwordHash: row.password_hash,
     role: row.role,
+    loginId: row.login_id,
+    mustChangePassword: row.must_change_password,
+    phone: row.phone,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -57,14 +105,17 @@ export async function findUserById(id: string): Promise<User | null> {
  */
 export async function createUser(data: CreateUserInput): Promise<User> {
   const result = await query(
-    `INSERT INTO users (email, name, password_hash, role) 
-     VALUES ($1, $2, $3, $4) 
-     RETURNING id, email, name, password_hash, role, created_at, updated_at`,
+    `INSERT INTO users (email, name, password_hash, role, login_id, must_change_password, phone) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7) 
+     RETURNING id, email, name, password_hash, role, login_id, must_change_password, phone, created_at, updated_at`,
     [
       data.email.toLowerCase(),
       data.name,
       data.passwordHash || null,
       data.role || 'user',
+      data.loginId || null,
+      data.mustChangePassword ?? false,
+      data.phone || null,
     ]
   );
   
@@ -75,6 +126,9 @@ export async function createUser(data: CreateUserInput): Promise<User> {
     name: row.name,
     passwordHash: row.password_hash,
     role: row.role,
+    loginId: row.login_id,
+    mustChangePassword: row.must_change_password,
+    phone: row.phone,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -85,7 +139,7 @@ export async function createUser(data: CreateUserInput): Promise<User> {
  */
 export async function getUserWithoutPassword(id: string): Promise<UserWithoutPassword | null> {
   const result = await query(
-    'SELECT id, email, name, role, created_at, updated_at FROM users WHERE id = $1',
+    'SELECT id, email, name, role, login_id, must_change_password, phone, created_at, updated_at FROM users WHERE id = $1',
     [id]
   );
   
@@ -99,6 +153,9 @@ export async function getUserWithoutPassword(id: string): Promise<UserWithoutPas
     email: row.email,
     name: row.name,
     role: row.role,
+    loginId: row.login_id,
+    mustChangePassword: row.must_change_password,
+    phone: row.phone,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -138,7 +195,7 @@ export async function findSessionWithUser(id: string): Promise<SessionWithUser |
   const result = await query(
     `SELECT 
        s.id, s.user_id, s.refresh_token_hash, s.user_agent, s.ip, s.expires_at, s.revoked_at, s.created_at,
-       u.id as user_id_full, u.email, u.name, u.password_hash, u.role, u.created_at as user_created_at, u.updated_at as user_updated_at
+       u.id as user_id_full, u.email, u.name, u.password_hash, u.role, u.login_id, u.must_change_password, u.phone, u.created_at as user_created_at, u.updated_at as user_updated_at
      FROM sessions s
      INNER JOIN users u ON s.user_id = u.id
      WHERE s.id = $1`,
@@ -165,6 +222,9 @@ export async function findSessionWithUser(id: string): Promise<SessionWithUser |
       name: row.name,
       passwordHash: row.password_hash,
       role: row.role,
+      loginId: row.login_id,
+      mustChangePassword: row.must_change_password,
+      phone: row.phone,
       createdAt: row.user_created_at,
       updatedAt: row.user_updated_at,
     },
@@ -287,5 +347,25 @@ export async function findValidSession(sessionId: string): Promise<Session | nul
     revokedAt: row.revoked_at,
     createdAt: row.created_at,
   };
+}
+
+/**
+ * Update user password
+ */
+export async function updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+  await query(
+    'UPDATE users SET password_hash = $1, must_change_password = false, updated_at = now() WHERE id = $2',
+    [passwordHash, userId]
+  );
+}
+
+/**
+ * Revoke all sessions for a user (for password change security)
+ */
+export async function revokeAllUserSessions(userId: string): Promise<void> {
+  await query(
+    'UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL',
+    [userId]
+  );
 }
 

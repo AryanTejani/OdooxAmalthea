@@ -1,9 +1,9 @@
 import { User, UserWithoutPassword } from '../user/user.types';
 import { hashPassword, verifyPassword, hashRefreshToken, generateSecureToken, verifyRefreshToken } from '../../utils/crypto';
 import { signAccessToken, signRefreshToken, verifyRefreshToken as verifyRefreshJWT } from '../../utils/jwt';
-import { findUserByEmail, createUser, getUserWithoutPassword, findSessionWithUser, createSession as createSessionRepo, revokeSession as revokeSessionRepo, updateSessionRefreshTokenHash } from './auth.repo';
+import { findUserByEmail, findUserByEmailOrLoginId, findUserById, createUser, getUserWithoutPassword, findSessionWithUser, createSession as createSessionRepo, revokeSession as revokeSessionRepo, updateSessionRefreshTokenHash, updateUserPassword, revokeAllUserSessions } from './auth.repo';
 import { AppError } from '../../middleware/errors';
-import { RegisterInput, LoginInput } from './auth.schemas';
+import { RegisterInput, LoginInput, ChangePasswordInput } from './auth.schemas';
 import { logger } from '../../config/logger';
 
 export interface AuthResult {
@@ -55,30 +55,77 @@ export async function register(
 }
 
 /**
- * Login user
+ * Login user (supports email or login_id)
  */
 export async function login(
   input: LoginInput,
   userAgent: string,
   ip: string
-): Promise<AuthResult> {
-  // Find user
-  const user = await findUserByEmail(input.email);
+): Promise<AuthResult & { mustChangePassword: boolean }> {
+  // Find user by email or login_id
+  const user = await findUserByEmailOrLoginId(input.login);
   
-  // Generic error to prevent email enumeration
+  // Generic error to prevent enumeration
   if (!user || !user.passwordHash) {
-    throw new AppError('INVALID_CREDENTIALS', 'Invalid email or password', 401);
+    throw new AppError('INVALID_CREDENTIALS', 'Invalid login ID/email or password', 401);
   }
 
   // Verify password
   const isValid = await verifyPassword(input.password, user.passwordHash);
   if (!isValid) {
-    throw new AppError('INVALID_CREDENTIALS', 'Invalid email or password', 401);
+    throw new AppError('INVALID_CREDENTIALS', 'Invalid login ID/email or password', 401);
   }
 
-  logger.info({ userId: user.id, email: user.email }, 'User logged in');
+  logger.info({ userId: user.id, email: user.email, loginId: user.loginId }, 'User logged in');
 
   // Create session
+  const { accessToken, refreshToken } = await createSession(user, userAgent, ip);
+
+  // Return user without password
+  const userWithoutPassword = await getUserWithoutPassword(user.id);
+  if (!userWithoutPassword) {
+    throw new AppError('USER_NOT_FOUND', 'User not found', 404);
+  }
+
+  return {
+    user: userWithoutPassword,
+    accessToken,
+    refreshToken,
+    mustChangePassword: user.mustChangePassword,
+  };
+}
+
+/**
+ * Change password (for first login or password update)
+ */
+export async function changePassword(
+  userId: string,
+  input: ChangePasswordInput,
+  userAgent: string,
+  ip: string
+): Promise<AuthResult> {
+  // Get user
+  const user = await findUserById(userId);
+  if (!user || !user.passwordHash) {
+    throw new AppError('USER_NOT_FOUND', 'User not found', 404);
+  }
+
+  // Verify current password
+  const isValid = await verifyPassword(input.currentPassword, user.passwordHash);
+  if (!isValid) {
+    throw new AppError('INVALID_PASSWORD', 'Current password is incorrect', 401);
+  }
+
+  // Hash new password
+  const newPasswordHash = await hashPassword(input.newPassword);
+
+  // Update password and revoke all other sessions for security
+  await updateUserPassword(userId, newPasswordHash);
+  await revokeAllUserSessions(userId);
+
+  logger.info({ userId: user.id }, 'Password changed');
+
+  // Create new session with new tokens
   const { accessToken, refreshToken } = await createSession(user, userAgent, ip);
 
   // Return user without password

@@ -5,10 +5,12 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  mustChangePassword: boolean;
+  login: (login: string, password: string) => Promise<{ mustChangePassword: boolean }>;
   register: (email: string, name: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,6 +19,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   // Fetch current user on mount
   const fetchUser = useCallback(async () => {
@@ -24,10 +27,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       const currentUser = await authApi.getMe();
       setUser(currentUser);
+      setMustChangePassword(currentUser.mustChangePassword ?? false);
       setError(null);
     } catch (err) {
       // Not authenticated - that's okay
       setUser(null);
+      setMustChangePassword(false);
     } finally {
       setLoading(false);
     }
@@ -38,8 +43,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const currentUser = await authApi.getMe();
       setUser(currentUser);
+      setMustChangePassword(currentUser.mustChangePassword ?? false);
     } catch (err) {
       setUser(null);
+      setMustChangePassword(false);
     }
   }, []);
 
@@ -70,12 +77,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchUser]);
 
   // Login
-  const login = async (email: string, password: string) => {
+  const login = async (login: string, password: string) => {
     try {
       setLoading(true);
       setError(null);
-      const loggedInUser = await authApi.login({ email, password });
-      setUser(loggedInUser);
+      const result = await authApi.login({ login, password });
+      setUser(result.user);
+      setMustChangePassword(result.mustChangePassword);
+      return { mustChangePassword: result.mustChangePassword };
+    } catch (err) {
+      const message = getErrorMessage(err);
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Change password
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const updatedUser = await authApi.changePassword({ currentPassword, newPassword });
+      setUser(updatedUser);
+      setMustChangePassword(false);
     } catch (err) {
       const message = getErrorMessage(err);
       setError(message);
@@ -123,10 +149,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         error,
+        mustChangePassword,
         login,
         register,
         logout,
         refreshUser,
+        changePassword,
       }}
     >
       {children}

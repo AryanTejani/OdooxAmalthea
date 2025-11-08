@@ -146,9 +146,11 @@ export async function getPendingLeaveRequests(): Promise<LeaveRequestWithEmploye
     `SELECT 
        l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.status, l.approver_id, l.created_at, l.updated_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
+       u.name as user_name, u.email as user_email,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM leave_requests l
      INNER JOIN employees e ON l.employee_id = e.id
+     INNER JOIN users u ON e.user_id = u.id
      LEFT JOIN org_units o ON e.org_unit_id = o.id
      WHERE l.status = 'PENDING'
      ORDER BY l.created_at ASC`,
@@ -169,7 +171,7 @@ export async function getPendingLeaveRequests(): Promise<LeaveRequestWithEmploye
       updatedAt: row.updated_at,
     };
     
-    const employee: Employee & { orgUnit?: OrgUnit | null } = {
+    const employee: Employee & { orgUnit?: OrgUnit | null; userName?: string; userEmail?: string } = {
       id: row.emp_id,
       userId: row.user_id,
       orgUnitId: row.org_unit_id,
@@ -178,6 +180,8 @@ export async function getPendingLeaveRequests(): Promise<LeaveRequestWithEmploye
       joinDate: row.join_date,
       createdAt: row.emp_created_at,
       updatedAt: row.emp_updated_at,
+      userName: row.user_name,
+      userEmail: row.user_email,
     };
     
     if (row.org_id) {

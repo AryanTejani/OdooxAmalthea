@@ -50,8 +50,11 @@ export async function createOrgUnitController(req: Request, res: Response): Prom
 export async function createEmployeeController(req: Request, res: Response): Promise<void> {
   try {
     const data = createEmployeeSchema.parse(req.body);
-    const employee = await orgService.createEmployee(data, req.user!.userId);
-    res.status(201).json({ data: employee });
+    const result = await orgService.createEmployee(data, req.user!.userId);
+    res.status(201).json({ 
+      data: result.employee,
+      credentials: result.credentials,
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({
