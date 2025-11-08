@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String?   // Nullable for OAuth-only users
+  role         String    @default("user")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+  accounts     Account[]
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    // Hashed refresh token for security
+  userAgent        String
+  ip               String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+model Account {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String   // 'google'
+  providerAccountId String   // Google 'sub' claim
+  email             String?
+  profile           Json?    // Store additional profile data
+  createdAt         DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model OrgUnit {
+  id        String   @id @default(uuid())
+  name      String
+  parentId  String?
+  parent    OrgUnit? @relation("OrgParent", fields: [parentId], references: [id])
+  children  OrgUnit[] @relation("OrgParent")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  employees Employee[]
+
+  @@index([parentId])
+}
+
+model Employee {
+  id         String       @id @default(uuid())
+  userId     String       @unique
+  orgUnitId  String?
+  orgUnit    OrgUnit?     @relation(fields: [orgUnitId], references: [id], onDelete: SetNull)
+  code       String       @unique
+  title      String?
+  joinDate   DateTime
+  salaryCfg  SalaryConfig?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  attendance Attendance[]
+  leaveRequests LeaveRequest[]
+  payslips   Payslip[]
+
+  @@index([orgUnitId])
+}
+
+model SalaryConfig {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String   @unique
+  basic      Decimal  @db.Decimal(12, 2)
+  allowances Json     // JSONB for flexible components
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LEAVE
+  HALF_DAY
+}
+
+model Attendance {
+  id         String            @id @default(uuid())
+  employee   Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  day        DateTime          // date-only semantics; store at UTC midnight
+  inAt       DateTime?
+  outAt      DateTime?
+  status     AttendanceStatus  @default(PRESENT)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([employeeId, day])
+  @@index([day])
+}
+
+enum LeaveType {
+  CASUAL
+  SICK
+  UNPAID
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model LeaveRequest {
+  id         String      @id @default(uuid())
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  type       LeaveType
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  status     LeaveStatus @default(PENDING)
+  approverId String?     // FK to User.id (manager/HR)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([employeeId, status])
+}
+
+enum PayrunStatus {
+  DRAFT
+  FINALIZED
+}
+
+model Payrun {
+  id          String     @id @default(uuid())
+  month       String     // 'YYYY-MM'
+  status      PayrunStatus @default(DRAFT)
+  generatedAt DateTime?
+  createdAt   DateTime   @default(now())
+  payslips    Payslip[]
+
+  @@unique([month])
+}
+
+model Payslip {
+  id              String   @id @default(uuid())
+  payrun          Payrun   @relation(fields: [payrunId], references: [id], onDelete: Cascade)
+  payrunId        String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId      String
+  gross           Decimal  @db.Decimal(12, 2)
+  pf              Decimal  @db.Decimal(12, 2)   // 12% of basic (demo rule)
+  professionalTax Decimal  @db.Decimal(12, 2) // simple fixed per month demo
+  net             Decimal  @db.Decimal(12, 2)
+  breakdown       Json     // JSONB of components
+  createdAt       DateTime @default(now())
+
+  @@unique([payrunId, employeeId])
+  @@index([employeeId])
+}
+
+model Activity {
+  id        BigInt   @id @default(autoincrement())
+  entity    String   // 'attendance' | 'leave' | 'payrun' | ...
+  refId     String
+  actorId   String?  // User.id
+  action    String   // 'create' | 'update' | 'approve' | ...
+  meta      Json
+  createdAt DateTime @default(now())
+
+  @@index([entity, createdAt])
+}
+

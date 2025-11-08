@@ -1,0 +1,396 @@
+import { query } from '../../libs/db';
+import { LeaveRequest, LeaveType, LeaveStatus, Employee, OrgUnit } from '../../domain/types';
+
+interface LeaveRequestWithEmployee extends LeaveRequest {
+  employee?: Employee & {
+    orgUnit?: OrgUnit | null;
+  };
+}
+
+/**
+ * Create leave request
+ */
+export async function createLeaveRequest(data: {
+  employeeId: string;
+  type: LeaveType;
+  startDate: Date;
+  endDate: Date;
+  reason?: string | null;
+}): Promise<LeaveRequestWithEmployee> {
+  const startStr = new Date(data.startDate).toISOString().split('T')[0];
+  const endStr = new Date(data.endDate).toISOString().split('T')[0];
+  
+  const result = await query(
+    `INSERT INTO leave_requests (employee_id, type, start_date, end_date, reason) 
+     VALUES ($1, $2, $3, $4, $5) 
+     RETURNING id, employee_id, type, start_date, end_date, reason, status, approver_id, created_at, updated_at`,
+    [data.employeeId, data.type, startStr, endStr, data.reason || null]
+  );
+  
+  const row = result.rows[0];
+  const leaveRequest: LeaveRequest = {
+    id: row.id,
+    employeeId: row.employee_id,
+    type: row.type,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    reason: row.reason,
+    status: row.status,
+    approverId: row.approver_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+  
+  // Get employee with org unit
+  const empResult = await query(
+    `SELECT 
+       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+       o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
+     FROM employees e
+     LEFT JOIN org_units o ON e.org_unit_id = o.id
+     WHERE e.id = $1`,
+    [data.employeeId]
+  );
+  
+  if (empResult.rows.length > 0) {
+    const empRow = empResult.rows[0];
+    const employee: Employee & { orgUnit?: OrgUnit | null } = {
+      id: empRow.id,
+      userId: empRow.user_id,
+      orgUnitId: empRow.org_unit_id,
+      code: empRow.code,
+      title: empRow.title,
+      joinDate: empRow.join_date,
+      createdAt: empRow.created_at,
+      updatedAt: empRow.updated_at,
+    };
+    
+    if (empRow.org_id) {
+      employee.orgUnit = {
+        id: empRow.org_id,
+        name: empRow.org_name,
+        parentId: empRow.org_parent_id,
+        createdAt: empRow.org_created_at,
+        updatedAt: empRow.org_updated_at,
+      };
+    }
+    
+    return { ...leaveRequest, employee };
+  }
+  
+  return leaveRequest;
+}
+
+/**
+ * Get leave requests by employee ID
+ */
+export async function getLeaveRequestsByEmployeeId(employeeId: string): Promise<LeaveRequestWithEmployee[]> {
+  const result = await query(
+    `SELECT 
+       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.status, l.approver_id, l.created_at, l.updated_at,
+       e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
+       o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
+     FROM leave_requests l
+     INNER JOIN employees e ON l.employee_id = e.id
+     LEFT JOIN org_units o ON e.org_unit_id = o.id
+     WHERE l.employee_id = $1
+     ORDER BY l.created_at DESC`,
+    [employeeId]
+  );
+  
+  return result.rows.map((row) => {
+    const leaveRequest: LeaveRequestWithEmployee = {
+      id: row.id,
+      employeeId: row.employee_id,
+      type: row.type,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      reason: row.reason,
+      status: row.status,
+      approverId: row.approver_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+    
+    const employee: Employee & { orgUnit?: OrgUnit | null } = {
+      id: row.emp_id,
+      userId: row.user_id,
+      orgUnitId: row.org_unit_id,
+      code: row.code,
+      title: row.title,
+      joinDate: row.join_date,
+      createdAt: row.emp_created_at,
+      updatedAt: row.emp_updated_at,
+    };
+    
+    if (row.org_id) {
+      employee.orgUnit = {
+        id: row.org_id,
+        name: row.org_name,
+        parentId: row.org_parent_id,
+        createdAt: row.org_created_at,
+        updatedAt: row.org_updated_at,
+      };
+    }
+    
+    leaveRequest.employee = employee;
+    return leaveRequest;
+  });
+}
+
+/**
+ * Get pending leave requests
+ */
+export async function getPendingLeaveRequests(): Promise<LeaveRequestWithEmployee[]> {
+  const result = await query(
+    `SELECT 
+       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.status, l.approver_id, l.created_at, l.updated_at,
+       e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
+       o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
+     FROM leave_requests l
+     INNER JOIN employees e ON l.employee_id = e.id
+     LEFT JOIN org_units o ON e.org_unit_id = o.id
+     WHERE l.status = 'PENDING'
+     ORDER BY l.created_at ASC`,
+    []
+  );
+  
+  return result.rows.map((row) => {
+    const leaveRequest: LeaveRequestWithEmployee = {
+      id: row.id,
+      employeeId: row.employee_id,
+      type: row.type,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      reason: row.reason,
+      status: row.status,
+      approverId: row.approver_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+    
+    const employee: Employee & { orgUnit?: OrgUnit | null } = {
+      id: row.emp_id,
+      userId: row.user_id,
+      orgUnitId: row.org_unit_id,
+      code: row.code,
+      title: row.title,
+      joinDate: row.join_date,
+      createdAt: row.emp_created_at,
+      updatedAt: row.emp_updated_at,
+    };
+    
+    if (row.org_id) {
+      employee.orgUnit = {
+        id: row.org_id,
+        name: row.org_name,
+        parentId: row.org_parent_id,
+        createdAt: row.org_created_at,
+        updatedAt: row.org_updated_at,
+      };
+    }
+    
+    leaveRequest.employee = employee;
+    return leaveRequest;
+  });
+}
+
+/**
+ * Get leave request by ID
+ */
+export async function getLeaveRequestById(id: string): Promise<LeaveRequestWithEmployee | null> {
+  const result = await query(
+    `SELECT 
+       l.id, l.employee_id, l.type, l.start_date, l.end_date, l.reason, l.status, l.approver_id, l.created_at, l.updated_at,
+       e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
+       o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
+     FROM leave_requests l
+     INNER JOIN employees e ON l.employee_id = e.id
+     LEFT JOIN org_units o ON e.org_unit_id = o.id
+     WHERE l.id = $1`,
+    [id]
+  );
+  
+  if (result.rows.length === 0) {
+    return null;
+  }
+  
+  const row = result.rows[0];
+  const leaveRequest: LeaveRequestWithEmployee = {
+    id: row.id,
+    employeeId: row.employee_id,
+    type: row.type,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    reason: row.reason,
+    status: row.status,
+    approverId: row.approver_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+  
+  const employee: Employee & { orgUnit?: OrgUnit | null } = {
+    id: row.emp_id,
+    userId: row.user_id,
+    orgUnitId: row.org_unit_id,
+    code: row.code,
+    title: row.title,
+    joinDate: row.join_date,
+    createdAt: row.emp_created_at,
+    updatedAt: row.emp_updated_at,
+  };
+  
+  if (row.org_id) {
+    employee.orgUnit = {
+      id: row.org_id,
+      name: row.org_name,
+      parentId: row.org_parent_id,
+      createdAt: row.org_created_at,
+      updatedAt: row.org_updated_at,
+    };
+  }
+  
+  leaveRequest.employee = employee;
+  return leaveRequest;
+}
+
+/**
+ * Approve leave request
+ */
+export async function approveLeaveRequest(id: string, approverId: string): Promise<LeaveRequestWithEmployee> {
+  const result = await query(
+    `UPDATE leave_requests 
+     SET status = 'APPROVED', approver_id = $2 
+     WHERE id = $1 
+     RETURNING id, employee_id, type, start_date, end_date, reason, status, approver_id, created_at, updated_at`,
+    [id, approverId]
+  );
+  
+  const row = result.rows[0];
+  const leaveRequest: LeaveRequest = {
+    id: row.id,
+    employeeId: row.employee_id,
+    type: row.type,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    reason: row.reason,
+    status: row.status,
+    approverId: row.approver_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+  
+  // Get employee with org unit
+  const empResult = await query(
+    `SELECT 
+       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+       o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
+     FROM employees e
+     LEFT JOIN org_units o ON e.org_unit_id = o.id
+     WHERE e.id = $1`,
+    [row.employee_id]
+  );
+  
+  if (empResult.rows.length > 0) {
+    const empRow = empResult.rows[0];
+    const employee: Employee & { orgUnit?: OrgUnit | null } = {
+      id: empRow.id,
+      userId: empRow.user_id,
+      orgUnitId: empRow.org_unit_id,
+      code: empRow.code,
+      title: empRow.title,
+      joinDate: empRow.join_date,
+      createdAt: empRow.created_at,
+      updatedAt: empRow.updated_at,
+    };
+    
+    if (empRow.org_id) {
+      employee.orgUnit = {
+        id: empRow.org_id,
+        name: empRow.org_name,
+        parentId: empRow.org_parent_id,
+        createdAt: empRow.org_created_at,
+        updatedAt: empRow.org_updated_at,
+      };
+    }
+    
+    return { ...leaveRequest, employee };
+  }
+  
+  return leaveRequest;
+}
+
+/**
+ * Reject leave request
+ */
+export async function rejectLeaveRequest(id: string, approverId: string): Promise<LeaveRequestWithEmployee> {
+  const result = await query(
+    `UPDATE leave_requests 
+     SET status = 'REJECTED', approver_id = $2 
+     WHERE id = $1 
+     RETURNING id, employee_id, type, start_date, end_date, reason, status, approver_id, created_at, updated_at`,
+    [id, approverId]
+  );
+  
+  const row = result.rows[0];
+  const leaveRequest: LeaveRequest = {
+    id: row.id,
+    employeeId: row.employee_id,
+    type: row.type,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    reason: row.reason,
+    status: row.status,
+    approverId: row.approver_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+  
+  // Get employee with org unit
+  const empResult = await query(
+    `SELECT 
+       e.id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at, e.updated_at,
+       o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
+     FROM employees e
+     LEFT JOIN org_units o ON e.org_unit_id = o.id
+     WHERE e.id = $1`,
+    [row.employee_id]
+  );
+  
+  if (empResult.rows.length > 0) {
+    const empRow = empResult.rows[0];
+    const employee: Employee & { orgUnit?: OrgUnit | null } = {
+      id: empRow.id,
+      userId: empRow.user_id,
+      orgUnitId: empRow.org_unit_id,
+      code: empRow.code,
+      title: empRow.title,
+      joinDate: empRow.join_date,
+      createdAt: empRow.created_at,
+      updatedAt: empRow.updated_at,
+    };
+    
+    if (empRow.org_id) {
+      employee.orgUnit = {
+        id: empRow.org_id,
+        name: empRow.org_name,
+        parentId: empRow.org_parent_id,
+        createdAt: empRow.org_created_at,
+        updatedAt: empRow.org_updated_at,
+      };
+    }
+    
+    return { ...leaveRequest, employee };
+  }
+  
+  return leaveRequest;
+}
+
+export const leaveRepo = {
+  create: createLeaveRequest,
+  getByEmployeeId: getLeaveRequestsByEmployeeId,
+  getPending: getPendingLeaveRequests,
+  getById: getLeaveRequestById,
+  approve: approveLeaveRequest,
+  reject: rejectLeaveRequest,
+};
