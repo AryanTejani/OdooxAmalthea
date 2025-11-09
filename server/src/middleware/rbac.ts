@@ -67,8 +67,10 @@ export const requirePayrollOfficer = requireRole(['admin', 'payroll']);
 export const requireHROfficer = requireRole(['admin', 'hr']);
 
 /**
- * Convenience middleware for leave approvals (HR Officer, Payroll Officer, Admin)
+ * Convenience middleware for leave approvals (HR Officer and Admin only)
+ * Note: HR's own leave requests go to admin for approval
+ * Payroll officers cannot see or approve leave requests (finance only)
  */
-export const requireLeaveApprover = requireRole(['admin', 'hr', 'payroll']);
+export const requireLeaveApprover = requireRole(['admin', 'hr']);
 
 

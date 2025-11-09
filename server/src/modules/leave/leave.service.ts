@@ -52,8 +52,12 @@ export const leaveService = {
     return leaveRepo.getByEmployeeId(employeeId, companyId);
   },
 
-  async getPendingLeaveRequests(companyId: string) {
-    return leaveRepo.getPending(companyId);
+  async getLeaveRequestById(id: string, companyId: string) {
+    return leaveRepo.getById(id, companyId);
+  },
+
+  async getPendingLeaveRequests(companyId: string, excludeEmployeeId?: string) {
+    return leaveRepo.getPending(companyId, excludeEmployeeId);
   },
 
   async updateLeaveRequest(id: string, data: UpdateLeaveRequestInput, userId: string, employeeId: string, companyId: string) {

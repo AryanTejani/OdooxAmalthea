@@ -60,7 +60,7 @@ export function Timeline() {
   const [selectedTimeLog, setSelectedTimeLog] = useState<any | null>(null);
   const [editDescription, setEditDescription] = useState<string>('');
 
-  const { data: timeLogs, isLoading } = useQuery({
+  const { data: timeLogs, isLoading, refetch: refetchTimeLogs } = useQuery({
     queryKey: ['time-logs', 'me', startDate, endDate, selectedProjectId, selectedTaskId],
     queryFn: () => hrmsApi.getTimeLogs({
       startDate,
@@ -100,7 +100,9 @@ export function Timeline() {
   useWS({
     onMessage: (event) => {
       if (event.table === 'time_logs' && event.op) {
+        // Immediately refetch time logs when changes occur
         queryClient.invalidateQueries({ queryKey: ['time-logs'] });
+        refetchTimeLogs();
       }
     },
     filter: (event) => event.table === 'time_logs',

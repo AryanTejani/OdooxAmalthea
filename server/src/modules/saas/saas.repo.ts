@@ -1,5 +1,6 @@
 import { query, tx } from '../../libs/db';
 import { PoolClient } from 'pg';
+import { logger } from '../../config/logger';
 
 export interface Company {
   id: string;
@@ -182,21 +183,41 @@ export async function updateCompany(
     return company;
   }
 
-  updates.push(`updated_at = now()`);
+  // Note: companies table doesn't have updated_at column, so we don't update it
   params.push(id);
 
-  const result = await query(
-    `UPDATE companies SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING id, name, code, logo_url, created_at`,
-    params
-  );
+  const sql = `UPDATE companies SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING id, name, code, logo_url, created_at`;
+  
+  try {
+    const result = await query(sql, params);
 
-  const row = result.rows[0];
-  return {
-    id: row.id,
-    name: row.name,
-    code: row.code,
-    logoUrl: row.logo_url,
-    createdAt: row.created_at,
-  };
+    if (result.rows.length === 0) {
+      throw new Error(`Company with id ${id} not found`);
+    }
+
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      name: row.name,
+      code: row.code,
+      logoUrl: row.logo_url,
+      createdAt: row.created_at,
+    };
+  } catch (error) {
+    // Log detailed error for debugging
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    logger.error({
+      error: errorMessage,
+      stack: errorStack,
+      sql,
+      params,
+      updates,
+      paramIndex,
+      id,
+      data,
+    }, 'Error updating company in repository');
+    throw error;
+  }
 }
 

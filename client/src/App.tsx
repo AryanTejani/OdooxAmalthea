@@ -51,197 +51,197 @@ function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/saas/signup" element={<SaasSignup />} />
               <Route path="/saas/login" element={<SaasLogin />} />
-            <Route
-              path="/first-login"
-              element={
-                <ProtectedRoute>
-                  <FirstLogin />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <HRMSLayout>
-                    <Profile />
-                  </HRMSLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/dashboard"
-              element={
-                <ProtectedRoute>
-                  <HRMSLayout>
-                    <Dashboard />
-                  </HRMSLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/attendance"
-              element={
-                <ProtectedRoute>
-                  <HRMSLayout>
-                    <AttendanceMe />
-                  </HRMSLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/attendance/admin"
-              element={
-                <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']} feature="Attendance Admin">
-                  <HRMSLayout>
-                    <AttendanceAdmin />
-                  </HRMSLayout>
-                </RoleProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/leave"
-              element={
-                <ProtectedRoute>
-                  <HRMSLayout>
-                    <Leave />
-                  </HRMSLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/leave/approvals"
-              element={
-                <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']} feature="Leave Approvals">
-                  <HRMSLayout>
-                    <LeaveApprovals />
-                  </HRMSLayout>
-                </RoleProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/payroll"
-              element={
-                <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Payroll">
-                  <HRMSLayout>
-                    <PayrollDashboard />
-                  </HRMSLayout>
-                </RoleProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/payroll/payruns"
-              element={
-                <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Payroll">
-                  <HRMSLayout>
-                    <PayrunList />
-                  </HRMSLayout>
-                </RoleProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/payroll/payruns/:id"
-              element={
-                <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Payroll">
-                  <HRMSLayout>
-                    <PayrunDetail />
-                  </HRMSLayout>
-                </RoleProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/payroll/payslips/:id"
-              element={
-                <ProtectedRoute>
-                  <HRMSLayout>
-                    <PayslipDetail />
-                  </HRMSLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/salary"
-              element={
-                <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']}>
-                  <HRMSLayout>
-                    <SalaryManagement />
-                  </HRMSLayout>
-                </RoleProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/my/payslips"
-              element={
-                <ProtectedRoute>
-                  <HRMSLayout>
-                    <MyPayslips />
-                  </HRMSLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/employees"
-              element={
-                <ProtectedRoute>
-                  <HRMSLayout>
-                    <Employees />
-                  </HRMSLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/time-tracker"
-              element={
-                <ProtectedRoute>
-                  <HRMSLayout>
-                    <TimeTracker />
-                  </HRMSLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/timeline"
-              element={
-                <ProtectedRoute>
-                  <HRMSLayout>
-                    <Timeline />
-                  </HRMSLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/time-logs"
-              element={
-                <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']} feature="Time Logs">
-                  <HRMSLayout>
-                    <TimeLogs />
-                  </HRMSLayout>
-                </RoleProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/reset-passwords"
-              element={
-                <RoleProtectedRoute allowedRoles={['admin']} feature="Reset Passwords">
-                  <HRMSLayout>
-                    <ResetPasswords />
-                  </HRMSLayout>
-                </RoleProtectedRoute>
-              }
-            />
-            <Route
-              path="/hrms/settings/users"
-              element={
-                <RoleProtectedRoute allowedRoles={['admin']} feature="User Access Settings">
-                  <HRMSLayout>
-                    <SettingsUsers />
-                  </HRMSLayout>
-                </RoleProtectedRoute>
-              }
-            />
-            <Route path="*" element={<Navigate to="/hrms/dashboard" replace />} />
-          </Routes>
-          <Toaster position="top-right" richColors />
+              <Route
+                path="/first-login"
+                element={
+                  <ProtectedRoute>
+                    <FirstLogin />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <HRMSLayout>
+                      <Profile />
+                    </HRMSLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <HRMSLayout>
+                      <Dashboard />
+                    </HRMSLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/attendance"
+                element={
+                  <ProtectedRoute>
+                    <HRMSLayout>
+                      <AttendanceMe />
+                    </HRMSLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/attendance/admin"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']} feature="Attendance Admin">
+                    <HRMSLayout>
+                      <AttendanceAdmin />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/leave"
+                element={
+                  <ProtectedRoute>
+                    <HRMSLayout>
+                      <Leave />
+                    </HRMSLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/leave/approvals"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin', 'hr']} feature="Leave Approvals">
+                    <HRMSLayout>
+                      <LeaveApprovals />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/payroll"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Payroll">
+                    <HRMSLayout>
+                      <PayrollDashboard />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/payroll/payruns"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Payroll">
+                    <HRMSLayout>
+                      <PayrunList />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/payroll/payruns/:id"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Payroll">
+                    <HRMSLayout>
+                      <PayrunDetail />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/payroll/payslips/:id"
+                element={
+                  <ProtectedRoute>
+                    <HRMSLayout>
+                      <PayslipDetail />
+                    </HRMSLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/salary"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']} feature="Salary Management">
+                    <HRMSLayout>
+                      <SalaryManagement />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/my/payslips"
+                element={
+                  <ProtectedRoute>
+                    <HRMSLayout>
+                      <MyPayslips />
+                    </HRMSLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/employees"
+                element={
+                  <ProtectedRoute>
+                    <HRMSLayout>
+                      <Employees />
+                    </HRMSLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/time-tracker"
+                element={
+                  <ProtectedRoute>
+                    <HRMSLayout>
+                      <TimeTracker />
+                    </HRMSLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/timeline"
+                element={
+                  <ProtectedRoute>
+                    <HRMSLayout>
+                      <Timeline />
+                    </HRMSLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/time-logs"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']} feature="Time Logs">
+                    <HRMSLayout>
+                      <TimeLogs />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/reset-passwords"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin']} feature="Reset Passwords">
+                    <HRMSLayout>
+                      <ResetPasswords />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/settings/users"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin']} feature="User Access Settings">
+                    <HRMSLayout>
+                      <SettingsUsers />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route path="*" element={<Navigate to="/hrms/dashboard" replace />} />
+            </Routes>
+            <Toaster position="bottom-right" richColors />
           </BrandProvider>
         </AuthProvider>
       </BrowserRouter>

@@ -32,7 +32,7 @@ export function SettingsUsers() {
   }
 
   // Fetch all users
-  const { data: users, isLoading } = useQuery({
+  const { data: users, isLoading, refetch: refetchUsers } = useQuery({
     queryKey: ['admin-users'],
     queryFn: () => adminApi.getAllUsers(),
   });
@@ -74,11 +74,13 @@ export function SettingsUsers() {
   // Listen for real-time updates
   useWS({
     onMessage: (event) => {
-      if (event.table === 'users' && event.op === 'UPDATE' && event.row) {
-        // Invalidate and refetch users list
+      if (event.table === 'users' && event.op && event.row) {
+        // Immediately refetch users list when user data changes
         queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+        refetchUsers();
       }
     },
+    filter: (event) => event.table === 'users',
   });
 
   // Map role values to display labels

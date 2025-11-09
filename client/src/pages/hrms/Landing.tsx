@@ -20,7 +20,7 @@ export function Landing() {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   // Get employees grid with status
-  const { data: employees, isLoading } = useQuery({
+  const { data: employees, isLoading, refetch: refetchEmployees } = useQuery({
     queryKey: ['employees', 'grid', search],
     queryFn: () => hrmsApi.getEmployeesGrid(search || undefined),
   });
@@ -29,13 +29,19 @@ export function Landing() {
   useWS({
     onMessage: (event) => {
       if (event.table === 'attendance' && event.op) {
+        // Immediately refetch employees grid when attendance changes
         queryClient.invalidateQueries({ queryKey: ['employees', 'grid'] });
+        refetchEmployees();
       }
       if (event.table === 'time_logs' && event.op) {
+        // Immediately refetch employees grid when time logs change
         queryClient.invalidateQueries({ queryKey: ['employees', 'grid'] });
+        refetchEmployees();
       }
       if (event.table === 'leaveRequest' && event.op) {
+        // Immediately refetch employees grid when leave requests change (status updates)
         queryClient.invalidateQueries({ queryKey: ['employees', 'grid'] });
+        refetchEmployees();
       }
     },
     filter: (event) => event.table === 'attendance' || event.table === 'time_logs' || event.table === 'leaveRequest',

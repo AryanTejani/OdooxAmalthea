@@ -15,7 +15,7 @@ export function LeaveApprovals() {
   const [selectedLeaveId, setSelectedLeaveId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  const { data: pendingLeaves } = useQuery({
+  const { data: pendingLeaves, refetch: refetchPendingLeaves } = useQuery({
     queryKey: ['leave', 'pending'],
     queryFn: () => hrmsApi.getPendingLeaveRequests(),
   });
@@ -24,7 +24,9 @@ export function LeaveApprovals() {
   useWS({
     onMessage: (event) => {
       if (event.table === 'leaveRequest' && event.op) {
+        // Immediately refetch pending leaves when status changes (approved/rejected)
         queryClient.invalidateQueries({ queryKey: ['leave'] });
+        refetchPendingLeaves();
       }
     },
     filter: (event) => event.table === 'leaveRequest',

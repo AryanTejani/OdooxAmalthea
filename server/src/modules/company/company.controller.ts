@@ -3,6 +3,8 @@ import * as companyService from './company.service';
 import { updateCompanySchema } from './company.schemas';
 import { AppError } from '../../middleware/errors';
 import { requireRole } from '../../middleware/roles';
+import { logger } from '../../config/logger';
+import { z } from 'zod';
 
 /**
  * Get current user's company
@@ -49,7 +51,22 @@ export async function updateCompanyController(
     }
 
     // Validate input
-    const input = updateCompanySchema.parse(req.body);
+    let input;
+    try {
+      input = updateCompanySchema.parse(req.body);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid input data',
+            details: error.errors,
+          },
+        });
+        return;
+      }
+      throw error;
+    }
 
     // Update company
     const company = await companyService.updateCompanyInfo(req.companyId, input);
@@ -58,6 +75,16 @@ export async function updateCompanyController(
       company,
     });
   } catch (error) {
+    logger.error({ error, body: req.body, companyId: req.companyId }, 'Failed to update company');
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
+      return;
+    }
     next(error);
   }
 }

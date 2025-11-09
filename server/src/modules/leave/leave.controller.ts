@@ -106,7 +106,7 @@ export async function getMyLeaveRequestsController(req: Request, res: Response):
 
 export async function getPendingLeaveRequestsController(req: Request, res: Response): Promise<void> {
   try {
-    if (!req.companyId) {
+    if (!req.companyId || !req.user) {
       res.status(403).json({
         error: {
           code: 'NO_COMPANY',
@@ -116,7 +116,22 @@ export async function getPendingLeaveRequestsController(req: Request, res: Respo
       return;
     }
 
-    const leaves = await leaveService.getPendingLeaveRequests(req.companyId);
+    const userRole = req.user.role;
+    const userId = req.user.userId;
+
+    // Get employee record for the current user (to check if they are HR)
+    let excludeEmployeeId: string | undefined;
+    if (userRole === 'hr') {
+      // HR can see all pending leave requests EXCEPT their own
+      // HR's own leave requests go to admin for approval
+      const employee = await orgService.getEmployeeByUserId(userId, req.companyId);
+      if (employee) {
+        excludeEmployeeId = employee.id;
+      }
+    }
+    // Admin can see all pending leave requests (excludeEmployeeId is undefined)
+
+    const leaves = await leaveService.getPendingLeaveRequests(req.companyId, excludeEmployeeId);
     res.json({ data: leaves });
   } catch (error) {
     logger.error({ error }, 'Failed to get pending leave requests');
@@ -131,7 +146,7 @@ export async function getPendingLeaveRequestsController(req: Request, res: Respo
 
 export async function approveLeaveRequestController(req: Request, res: Response): Promise<void> {
   try {
-    if (!req.companyId) {
+    if (!req.companyId || !req.user) {
       res.status(403).json({
         error: {
           code: 'NO_COMPANY',
@@ -142,13 +157,70 @@ export async function approveLeaveRequestController(req: Request, res: Response)
     }
 
     const { id } = req.params;
+    const userRole = req.user.role;
+    const userId = req.user.userId;
+
+    // Get the leave request directly by ID to check if it exists and get employee info
+    const leaveRequest = await leaveService.getLeaveRequestById(id, req.companyId);
+    
+    if (!leaveRequest) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Leave request not found',
+        },
+      });
+      return;
+    }
+
+    if (leaveRequest.status !== 'PENDING') {
+      res.status(400).json({
+        error: {
+          code: 'INVALID_STATUS',
+          message: 'Leave request is not pending',
+        },
+      });
+      return;
+    }
+
+    // If HR is trying to approve their own leave request, deny it (must go to admin)
+    // Verify that HR can see this leave request (it should not be their own)
+    if (userRole === 'hr') {
+      const employee = await orgService.getEmployeeByUserId(userId, req.companyId);
+      if (employee) {
+        // Check if HR is trying to approve their own request
+        if (leaveRequest.employeeId === employee.id) {
+          res.status(403).json({
+            error: {
+              code: 'FORBIDDEN',
+              message: 'HR cannot approve their own leave requests. Please contact admin for approval.',
+            },
+          });
+          return;
+        }
+        
+        // Verify that HR can see this leave request (it should not be their own)
+        const visibleLeaves = await leaveService.getPendingLeaveRequests(req.companyId, employee.id);
+        const canSeeLeave = visibleLeaves.some(l => l.id === id);
+        if (!canSeeLeave) {
+          res.status(403).json({
+            error: {
+              code: 'FORBIDDEN',
+              message: 'You do not have permission to approve this leave request',
+            },
+          });
+          return;
+        }
+      }
+    }
+
     const data = approveLeaveSchema.parse({
       ...req.body,
-      approverId: req.user!.userId,
+      approverId: userId,
     });
 
-    const leave = await leaveService.approveLeaveRequest(id, data, req.companyId);
-    res.json({ data: leave });
+    const approvedLeave = await leaveService.approveLeaveRequest(id, data, req.companyId);
+    res.json({ data: approvedLeave });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({
@@ -156,6 +228,16 @@ export async function approveLeaveRequestController(req: Request, res: Response)
           code: 'VALIDATION_ERROR',
           message: 'Invalid input',
           details: error.errors,
+        },
+      });
+      return;
+    }
+
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        error: {
+          code: error.code,
+          message: error.message,
         },
       });
       return;
@@ -239,7 +321,7 @@ export async function updateLeaveRequestController(req: Request, res: Response):
 
 export async function rejectLeaveRequestController(req: Request, res: Response): Promise<void> {
   try {
-    if (!req.companyId) {
+    if (!req.companyId || !req.user) {
       res.status(403).json({
         error: {
           code: 'NO_COMPANY',
@@ -250,13 +332,68 @@ export async function rejectLeaveRequestController(req: Request, res: Response):
     }
 
     const { id } = req.params;
+    const userRole = req.user.role;
+    const userId = req.user.userId;
+
+    // Get the leave request directly by ID to check if it exists and get employee info
+    const leaveRequest = await leaveService.getLeaveRequestById(id, req.companyId);
+    
+    if (!leaveRequest) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Leave request not found',
+        },
+      });
+      return;
+    }
+
+    if (leaveRequest.status !== 'PENDING') {
+      res.status(400).json({
+        error: {
+          code: 'INVALID_STATUS',
+          message: 'Leave request is not pending',
+        },
+      });
+      return;
+    }
+
+    // If HR is trying to reject their own leave request, deny it (must go to admin)
+    if (userRole === 'hr') {
+      const employee = await orgService.getEmployeeByUserId(userId, req.companyId);
+      if (employee && leaveRequest.employeeId === employee.id) {
+        res.status(403).json({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'HR cannot reject their own leave requests. Please contact admin.',
+          },
+        });
+        return;
+      }
+      
+      // Verify that HR can see this leave request (it should not be their own)
+      if (employee) {
+        const visibleLeaves = await leaveService.getPendingLeaveRequests(req.companyId, employee.id);
+        const canSeeLeave = visibleLeaves.some(l => l.id === id);
+        if (!canSeeLeave) {
+          res.status(403).json({
+            error: {
+              code: 'FORBIDDEN',
+              message: 'You do not have permission to reject this leave request',
+            },
+          });
+          return;
+        }
+      }
+    }
+
     const data = rejectLeaveSchema.parse({
       ...req.body,
-      approverId: req.user!.userId,
+      approverId: userId,
     });
 
-    const leave = await leaveService.rejectLeaveRequest(id, data, req.companyId);
-    res.json({ data: leave });
+    const rejectedLeave = await leaveService.rejectLeaveRequest(id, data, req.companyId);
+    res.json({ data: rejectedLeave });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({
@@ -264,6 +401,16 @@ export async function rejectLeaveRequestController(req: Request, res: Response):
           code: 'VALIDATION_ERROR',
           message: 'Invalid input',
           details: error.errors,
+        },
+      });
+      return;
+    }
+
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        error: {
+          code: error.code,
+          message: error.message,
         },
       });
       return;

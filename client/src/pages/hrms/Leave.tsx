@@ -48,7 +48,7 @@ export function Leave() {
   const [newLeaveOpen, setNewLeaveOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingLeave, setEditingLeave] = useState<LeaveRequest | null>(null);
-  const { data: myLeaves } = useQuery({
+  const { data: myLeaves, refetch: refetchMyLeaves } = useQuery({
     queryKey: ['leave', 'mine'],
     queryFn: () => hrmsApi.getMyLeaveRequests(),
   });
@@ -132,7 +132,9 @@ export function Leave() {
   useWS({
     onMessage: (event) => {
       if (event.table === 'leaveRequest' && event.op) {
+        // Immediately refetch leave requests when status changes
         queryClient.invalidateQueries({ queryKey: ['leave'] });
+        refetchMyLeaves();
       }
     },
     filter: (event) => event.table === 'leaveRequest',

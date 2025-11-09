@@ -160,23 +160,34 @@ export async function getLeaveRequestsByEmployeeId(employeeId: string, companyId
 
 /**
  * Get pending leave requests (filtered by company)
+ * @param companyId Company ID
+ * @param excludeEmployeeId Optional employee ID to exclude (e.g., HR's own employee ID so their requests go to admin)
  */
-export async function getPendingLeaveRequests(companyId: string): Promise<LeaveRequestWithEmployee[]> {
-  const result = await query(
-    `SELECT 
+export async function getPendingLeaveRequests(companyId: string, excludeEmployeeId?: string): Promise<LeaveRequestWithEmployee[]> {
+  let queryStr = `
+    SELECT 
        l.id, l.employee_id, l.company_id, l.type, l.start_date, l.end_date, l.reason, l.attachment_url, l.status, l.approver_id, l.created_at, l.updated_at,
        e.id as emp_id, e.user_id, e.org_unit_id, e.code, e.title, e.join_date, e.created_at as emp_created_at, e.updated_at as emp_updated_at,
-       u.name as user_name, u.email as user_email,
+       u.name as user_name, u.email as user_email, u.role as user_role,
        o.id as org_id, o.name as org_name, o.parent_id as org_parent_id, o.created_at as org_created_at, o.updated_at as org_updated_at
      FROM leave_requests l
      INNER JOIN employees e ON l.employee_id = e.id AND e.company_id = $1
      INNER JOIN users u ON e.user_id = u.id AND u.company_id = $1
      LEFT JOIN org_units o ON e.org_unit_id = o.id AND o.company_id = $1
      WHERE l.status = 'PENDING'
-     AND l.company_id = $1
-     ORDER BY l.created_at ASC`,
-    [companyId]
-  );
+     AND l.company_id = $1`;
+  
+  const params: any[] = [companyId];
+  
+  // Exclude HR's own leave requests (they go to admin for approval)
+  if (excludeEmployeeId) {
+    queryStr += ` AND l.employee_id != $2`;
+    params.push(excludeEmployeeId);
+  }
+  
+  queryStr += ` ORDER BY l.created_at ASC`;
+  
+  const result = await query(queryStr, params);
   
   return result.rows.map((row) => {
     const leaveRequest: LeaveRequestWithEmployee = {
@@ -193,7 +204,7 @@ export async function getPendingLeaveRequests(companyId: string): Promise<LeaveR
       updatedAt: row.updated_at,
     };
     
-    const employee: Employee & { orgUnit?: OrgUnit | null; userName?: string; userEmail?: string } = {
+    const employee: Employee & { orgUnit?: OrgUnit | null; userName?: string; userEmail?: string; userRole?: string } = {
       id: row.emp_id,
       userId: row.user_id,
       orgUnitId: row.org_unit_id,
@@ -204,6 +215,7 @@ export async function getPendingLeaveRequests(companyId: string): Promise<LeaveR
       updatedAt: row.emp_updated_at,
       userName: row.user_name,
       userEmail: row.user_email,
+      userRole: row.user_role,
     };
     
     if (row.org_id) {

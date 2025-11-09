@@ -72,8 +72,8 @@ const navItems: NavItem[] = [
     title: 'Leave Approvals',
     href: '/hrms/leave/approvals',
     icon: FileText,
-    roles: ['admin', 'hr', 'payroll'],
-    badge: 'HR/Payroll',
+    roles: ['admin', 'hr'], // Payroll officers cannot see leave approvals (finance only)
+    badge: 'HR/Admin',
   },
   {
     title: 'Payroll',

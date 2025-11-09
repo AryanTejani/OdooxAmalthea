@@ -50,8 +50,9 @@ export function Dashboard() {
   }
 
   // Admin/HR/Payroll Dashboard
-  if (dashboardStats?.role === 'admin') {
-    const { kpis, charts } = dashboardStats;
+  if (dashboardStats?.role === 'admin' || dashboardStats?.role === 'hr' || dashboardStats?.role === 'payroll') {
+    const { kpis, charts, role } = dashboardStats;
+    const isPayroll = role === 'payroll';
     
     // Prepare attendance trend chart data
     const attendanceTrendData = charts.attendanceTrend.map((item: any) => ({
@@ -71,7 +72,7 @@ export function Dashboard() {
         </div>
 
         {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div className={`grid gap-4 md:grid-cols-2 ${isPayroll ? 'lg:grid-cols-3' : 'lg:grid-cols-5'}`}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Present Today</CardTitle>
@@ -85,27 +86,31 @@ export function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">On Leave Today</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpis.onLeaveToday || 0}</div>
-              <p className="text-xs text-muted-foreground">Employees on leave</p>
-            </CardContent>
-          </Card>
+          {!isPayroll && (
+            <>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">On Leave Today</CardTitle>
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{kpis.onLeaveToday || 0}</div>
+                  <p className="text-xs text-muted-foreground">Employees on leave</p>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Leaves</CardTitle>
-              <AlertCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpis.pendingLeaves || 0}</div>
-              <p className="text-xs text-muted-foreground">Awaiting approval</p>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Pending Leaves</CardTitle>
+                  <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{kpis.pendingLeaves || 0}</div>
+                  <p className="text-xs text-muted-foreground">Awaiting approval</p>
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -163,37 +168,39 @@ export function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Leave Types (Last 30 Days)</CardTitle>
-              <CardDescription>Breakdown of approved leaves</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {charts.leaveTypes && charts.leaveTypes.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={charts.leaveTypes}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {charts.leaveTypes.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-center text-muted-foreground py-20">No leave data available</p>
-              )}
-            </CardContent>
-          </Card>
+          {!isPayroll && charts.leaveTypes && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Leave Types (Last 30 Days)</CardTitle>
+                <CardDescription>Breakdown of approved leaves</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {charts.leaveTypes.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={charts.leaveTypes}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {charts.leaveTypes.map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-20">No leave data available</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Quick Actions */}
@@ -207,16 +214,18 @@ export function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/hrms/leave/approvals')}>
-            <CardHeader>
-              <CardTitle className="text-lg">Review Leaves</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                {kpis.pendingLeaves || 0} pending approvals
-              </p>
-            </CardContent>
-          </Card>
+          {!isPayroll && (
+            <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/hrms/leave/approvals')}>
+              <CardHeader>
+                <CardTitle className="text-lg">Review Leaves</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  {kpis.pendingLeaves || 0} pending approvals
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {(user?.role === 'admin' || user?.role === 'payroll') && (
             <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/hrms/payroll')}>

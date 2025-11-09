@@ -24,7 +24,7 @@ export async function getDashboardStats(req: Request, res: Response): Promise<vo
     // Role-based dashboard data
     if (role === 'admin' || role === 'hr' || role === 'payroll') {
       // Admin/HR/Payroll Dashboard
-      const stats = await getAdminDashboardStats(companyId, today);
+      const stats = await getAdminDashboardStats(companyId, today, role);
       res.json({ data: stats });
     } else {
       // Employee Dashboard
@@ -44,8 +44,11 @@ export async function getDashboardStats(req: Request, res: Response): Promise<vo
 
 /**
  * Get admin/HR/payroll dashboard statistics
+ * @param companyId Company ID
+ * @param today Today's date in YYYY-MM-DD format
+ * @param role User role (admin, hr, or payroll)
  */
-async function getAdminDashboardStats(companyId: string, today: string) {
+async function getAdminDashboardStats(companyId: string, today: string, role: string) {
   // Employees present today
   const presentTodayResult = await query(
     `SELECT COUNT(DISTINCT e.id) as count
@@ -71,28 +74,35 @@ async function getAdminDashboardStats(companyId: string, today: string) {
   );
   const presentToday = parseInt(presentTodayResult.rows[0]?.count || '0');
 
-  // Employees on leave today
-  const onLeaveTodayResult = await query(
-    `SELECT COUNT(DISTINCT e.id) as count
-     FROM employees e
-     INNER JOIN leave_requests lr ON e.id = lr.employee_id AND lr.company_id = $1
-     WHERE e.company_id = $1
-       AND lr.status = 'APPROVED'
-       AND lr.start_date <= $2
-       AND lr.end_date >= $2`,
-    [companyId, today]
-  );
-  const onLeaveToday = parseInt(onLeaveTodayResult.rows[0]?.count || '0');
+  // Leave statistics (only for admin and HR, not for payroll)
+  let onLeaveToday = 0;
+  let pendingLeaves = 0;
+  let leaveTypes: Array<{ name: string; value: number }> = [];
 
-  // Pending leave approvals
-  const pendingLeavesResult = await query(
-    `SELECT COUNT(*) as count
-     FROM leave_requests lr
-     WHERE lr.company_id = $1
-       AND lr.status = 'PENDING'`,
-    [companyId]
-  );
-  const pendingLeaves = parseInt(pendingLeavesResult.rows[0]?.count || '0');
+  if (role !== 'payroll') {
+    // Employees on leave today
+    const onLeaveTodayResult = await query(
+      `SELECT COUNT(DISTINCT e.id) as count
+       FROM employees e
+       INNER JOIN leave_requests lr ON e.id = lr.employee_id AND lr.company_id = $1
+       WHERE e.company_id = $1
+         AND lr.status = 'APPROVED'
+         AND lr.start_date <= $2
+         AND lr.end_date >= $2`,
+      [companyId, today]
+    );
+    onLeaveToday = parseInt(onLeaveTodayResult.rows[0]?.count || '0');
+
+    // Pending leave approvals
+    const pendingLeavesResult = await query(
+      `SELECT COUNT(*) as count
+       FROM leave_requests lr
+       WHERE lr.company_id = $1
+         AND lr.status = 'PENDING'`,
+      [companyId]
+    );
+    pendingLeaves = parseInt(pendingLeavesResult.rows[0]?.count || '0');
+  }
 
   // Current payrun (latest payrun for current month)
   const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
@@ -132,25 +142,30 @@ async function getAdminDashboardStats(companyId: string, today: string) {
     [companyId]
   );
 
-  // Leave types breakdown (last 30 days)
-  const leaveTypesResult = await query(
-    `SELECT 
-       type,
-       COUNT(*) as count
-     FROM leave_requests
-     WHERE company_id = $1
-       AND status = 'APPROVED'
-       AND start_date >= CURRENT_DATE - INTERVAL '30 days'
-     GROUP BY type`,
-    [companyId]
-  );
+  // Leave types breakdown (last 30 days) - only for admin and HR
+  if (role !== 'payroll') {
+    const leaveTypesResult = await query(
+      `SELECT 
+         type,
+         COUNT(*) as count
+       FROM leave_requests
+       WHERE company_id = $1
+         AND status = 'APPROVED'
+         AND start_date >= CURRENT_DATE - INTERVAL '30 days'
+       GROUP BY type`,
+      [companyId]
+    );
+    leaveTypes = leaveTypesResult.rows.map(row => ({
+      name: row.type,
+      value: parseInt(row.count || '0'),
+    }));
+  }
 
   return {
-    role: 'admin',
+    role,
     kpis: {
       presentToday,
-      onLeaveToday,
-      pendingLeaves,
+      ...(role !== 'payroll' && { onLeaveToday, pendingLeaves }),
       totalEmployees,
       currentPayrun: currentPayrun ? {
         id: currentPayrun.id,
@@ -166,10 +181,7 @@ async function getAdminDashboardStats(companyId: string, today: string) {
         date: row.date.toISOString().split('T')[0],
         present: parseInt(row.present_count || '0'),
       })),
-      leaveTypes: leaveTypesResult.rows.map(row => ({
-        name: row.type,
-        value: parseInt(row.count || '0'),
-      })),
+      ...(role !== 'payroll' && { leaveTypes }),
     },
   };
 }
