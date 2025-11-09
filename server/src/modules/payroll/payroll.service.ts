@@ -26,6 +26,110 @@ interface ComputeWarning {
   reason: string;
 }
 
+interface PayableSummary {
+  employee_id: string;
+  total_working_days: number;
+  payable_days: number;
+  present_days: number;
+  paid_leave_days: number;
+}
+
+interface PayslipCalculation {
+  basic: number; // Monthly baseline
+  monthlyWage: number; // Monthly baseline (basic + allowances)
+  allowancesTotal: number;
+  totalWorkingDays: number;
+  payableDays: number;
+  presentDays: number;
+  paidLeaveDays: number;
+  earnedBasic: number; // Earned basic (prorated)
+  earnedAllowances: Record<string, number>; // Earned allowances (prorated)
+  gross: number;
+  pfEmployee: number;
+  pfEmployer: number;
+  professionalTax: number;
+  net: number;
+}
+
+/**
+ * Round to 2 decimal places
+ */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Calculate payslip components based on business rules
+ */
+function calculatePayslip(
+  employee: EmployeeWithSalary,
+  summary: PayableSummary
+): PayslipCalculation {
+  const workingDays = summary.total_working_days;
+  const payableDays = summary.payable_days;
+  const presentDays = summary.present_days;
+  const paidLeaveDays = summary.paid_leave_days;
+
+  // Baseline values (monthly)
+  const allowancesTotal = Object.values(employee.allowances).reduce(
+    (sum, val) => sum + (typeof val === 'number' ? val : 0),
+    0
+  );
+  const monthlyWage = employee.basic + allowancesTotal;
+
+  // Calculate earned amounts (prorated based on payable_days)
+  let earnedBasic = 0;
+  const earnedAllowances: Record<string, number> = {};
+
+  if (payableDays > 0 && workingDays > 0) {
+    const prorationFactor = payableDays / workingDays;
+    earnedBasic = round2(employee.basic * prorationFactor);
+    
+    // Calculate earned allowances
+    Object.entries(employee.allowances).forEach(([key, value]) => {
+      const allowanceValue = typeof value === 'number' ? value : 0;
+      earnedAllowances[key] = round2(allowanceValue * prorationFactor);
+    });
+  }
+
+  // Gross = earned_basic + sum of earned_allowances
+  const earnedAllowancesTotal = Object.values(earnedAllowances).reduce(
+    (sum, val) => sum + val,
+    0
+  );
+  const gross = round2(earnedBasic + earnedAllowancesTotal);
+
+  // PF Employee = earned_basic * PF_RATE, but only if earned_basic > 0
+  const pfEmployee = earnedBasic > 0 ? round2(earnedBasic * PF_RATE) : 0;
+  const pfEmployer = earnedBasic > 0 ? round2(earnedBasic * PF_RATE) : 0;
+
+  // Professional Tax: if gross == 0 → 0, else PROFESSIONAL_TAX
+  const professionalTax = gross > 0 ? PROFESSIONAL_TAX : 0;
+
+  // Deductions
+  const deductions = pfEmployee + professionalTax;
+
+  // Net = max(0, gross - deductions)
+  const net = Math.max(0, round2(gross - deductions));
+
+  return {
+    basic: employee.basic,
+    monthlyWage,
+    allowancesTotal,
+    totalWorkingDays: workingDays,
+    payableDays,
+    presentDays,
+    paidLeaveDays,
+    earnedBasic,
+    earnedAllowances,
+    gross,
+    pfEmployee,
+    pfEmployer,
+    professionalTax,
+    net,
+  };
+}
+
 export const payrollService = {
   /**
    * Create a draft payrun for a given month
@@ -172,99 +276,30 @@ export const payrollService = {
           continue;
         }
 
-        /**
-         * Salary Calculation Logic:
-         * 
-         * 1. Monthly Wage = Basic Salary + Allowances (HRA, etc.)
-         * 2. Total Working Days = Business days in month (Mon-Fri if WORK_WEEK_MON_TO_FRI=true)
-         * 3. Present Days = Days with timer >= MIN_ACTIVE_HOURS_PRESENT (default 5 hours)
-         * 4. Paid Leave Days = Days on CASUAL or SICK leave (approved)
-         * 5. Unpaid Leave Days = Days on UNPAID leave (excluded from payable days)
-         * 6. Payable Days = Present Days + Paid Leave Days
-         * 7. Daily Rate = Monthly Wage / Total Working Days
-         * 8. Gross = (Daily Rate × Present Days) + (Daily Rate × Paid Leave Days)
-         * 9. Prorated Basic = (Basic / Total Working Days) × Payable Days
-         * 10. Deductions = PF Employee (12% of Prorated Basic) + Professional Tax (₹200 if gross >= ₹15,000)
-         * 11. Net = Gross - Deductions (minimum 0, never negative)
-         */
-        
-        const allowancesTotal = Object.values(employee.allowances).reduce(
-          (sum, val) => sum + (typeof val === 'number' ? val : 0),
-          0
-        );
-        
-        const monthlyWage = employee.basic + allowancesTotal;
-        const totalWorkingDays = summary.total_working_days;
-        const payableDays = summary.payable_days;
-        const presentDays = summary.present_days;
-        const paidLeaveDays = summary.paid_leave_days;
+        // Calculate payslip using the business rule function
+        const calc = calculatePayslip(employee, summary);
 
-        // Calculate daily rate
-        const dailyRate = totalWorkingDays > 0 ? monthlyWage / totalWorkingDays : 0;
-
-        // Calculate amounts for each component
-        const attendanceDaysAmount = dailyRate * presentDays;
-        const paidLeaveDaysAmount = dailyRate * paidLeaveDays;
-        
-        // Gross is sum of attendance + paid leave
-        const gross = attendanceDaysAmount + paidLeaveDaysAmount;
-
-        // Calculate deductions (IMPORTANT: Prorate based on payable days)
-        // PF should be calculated on prorated basic, not full basic
-        const proratedBasic = totalWorkingDays > 0 
-          ? (employee.basic / totalWorkingDays) * payableDays 
-          : 0;
-        
-        const pfEmployee = proratedBasic * PF_RATE;
-        const pfEmployer = proratedBasic * PF_RATE;
-        
-        // Professional tax only applies if gross exceeds threshold (e.g., > 15000/month)
-        const professionalTax = gross >= 15000 ? PROFESSIONAL_TAX : 0;
-
-        // Calculate net (ensure it's not negative)
-        let net = gross - pfEmployee - professionalTax;
-        
-        // Safety check: If net is negative, adjust deductions
-        if (net < 0) {
-          logger.warn(
-            { 
-              employeeId: employee.id, 
-              gross, 
-              pfEmployee, 
-              professionalTax,
-              net 
-            }, 
-            'Net salary would be negative, adjusting deductions'
-          );
-          // In case of very low gross, reduce deductions proportionally
-          const totalDeductions = pfEmployee + professionalTax;
-          if (totalDeductions > gross) {
-            // Adjust PF to be maximum of what can be deducted
-            const adjustedPfEmployee = Math.max(0, gross - professionalTax);
-            net = 0; // Minimum net pay is 0
-          }
-        }
-
-        // Build components breakdown
+        // Build components breakdown (includes earned amounts for transparency)
         const components = {
-          basic: employee.basic,
+          basic: calc.basic,
           allowances: employee.allowances,
-          allowancesTotal,
-          monthlyWage,
-          totalWorkingDays,
-          payableDays,
-          presentDays,
-          paidLeaveDays,
-          dailyRate,
-          attendanceDaysAmount,
-          paidLeaveDaysAmount,
-          gross,
-          deductions: {
-            pfEmployee,
-            pfEmployer,
-            professionalTax,
+          allowancesTotal: calc.allowancesTotal,
+          monthlyWage: calc.monthlyWage,
+          totalWorkingDays: calc.totalWorkingDays,
+          payableDays: calc.payableDays,
+          presentDays: calc.presentDays,
+          paidLeaveDays: calc.paidLeaveDays,
+          earned: {
+            basic: calc.earnedBasic,
+            allowances: calc.earnedAllowances,
+            gross: calc.gross,
           },
-          net,
+          deductions: {
+            pfEmployee: calc.pfEmployee,
+            pfEmployer: calc.pfEmployer,
+            professionalTax: calc.professionalTax,
+          },
+          net: calc.net,
         };
 
         // Upsert payslip
@@ -275,26 +310,26 @@ export const payrollService = {
             userId: employee.userId,
             periodMonth: payrun.periodMonth,
             components,
-            basic: employee.basic,
-            allowancesTotal,
-            monthlyWage,
-            payableDays,
-            totalWorkingDays,
-            attendanceDaysAmount,
-            paidLeaveDaysAmount,
-            gross,
-            pfEmployee,
-            pfEmployer,
-            professionalTax,
-            net,
+            basic: calc.basic,
+            allowancesTotal: calc.allowancesTotal,
+            monthlyWage: calc.monthlyWage,
+            payableDays: calc.payableDays,
+            totalWorkingDays: calc.totalWorkingDays,
+            attendanceDaysAmount: 0, // Deprecated - using earned amounts instead
+            paidLeaveDaysAmount: 0, // Deprecated - using earned amounts instead
+            gross: calc.gross,
+            pfEmployee: calc.pfEmployee,
+            pfEmployer: calc.pfEmployer,
+            professionalTax: calc.professionalTax,
+            net: calc.net,
             status: 'computed',
           },
           companyId,
           client
         );
 
-        totalGross += gross;
-        totalNet += net;
+        totalGross += calc.gross;
+        totalNet += calc.net;
         processedCount++;
       }
 
@@ -530,62 +565,29 @@ export const payrollService = {
         throw new AppError('NOT_FOUND', 'No attendance data found for employee', 404);
       }
 
-      // Recalculate salary components (same logic as compute)
-      const allowancesTotal = Object.values(employee.allowances).reduce(
-        (sum, val) => sum + (typeof val === 'number' ? val : 0),
-        0
-      );
-      
-      const monthlyWage = employee.basic + allowancesTotal;
-      const totalWorkingDays = summary.total_working_days;
-      const payableDays = summary.payable_days;
-      const presentDays = summary.present_days;
-      const paidLeaveDays = summary.paid_leave_days;
-
-      const dailyRate = totalWorkingDays > 0 ? monthlyWage / totalWorkingDays : 0;
-      const attendanceDaysAmount = dailyRate * presentDays;
-      const paidLeaveDaysAmount = dailyRate * paidLeaveDays;
-      const gross = attendanceDaysAmount + paidLeaveDaysAmount;
-
-      // Prorate PF based on payable days
-      const proratedBasic = totalWorkingDays > 0 
-        ? (employee.basic / totalWorkingDays) * payableDays 
-        : 0;
-      
-      const pfEmployee = proratedBasic * PF_RATE;
-      const pfEmployer = proratedBasic * PF_RATE;
-      const professionalTax = gross >= 15000 ? PROFESSIONAL_TAX : 0;
-
-      let net = gross - pfEmployee - professionalTax;
-      
-      // Ensure net is never negative
-      if (net < 0) {
-        logger.warn(
-          { employeeId: employee.id, gross, pfEmployee, professionalTax, net },
-          'Net salary would be negative in recompute, adjusting'
-        );
-        net = 0;
-      }
+      // Recalculate salary components using the same business rule function
+      const calc = calculatePayslip(employee, summary);
 
       const components = {
-        basic: employee.basic,
+        basic: calc.basic,
         allowances: employee.allowances,
-        allowancesTotal,
-        monthlyWage,
-        totalWorkingDays,
-        payableDays,
-        presentDays,
-        paidLeaveDays,
-        dailyRate,
-        attendanceDaysAmount,
-        paidLeaveDaysAmount,
-        gross,
-        deductions: {
-          pfEmployee,
-          pfEmployer,
-          professionalTax,
+        allowancesTotal: calc.allowancesTotal,
+        monthlyWage: calc.monthlyWage,
+        totalWorkingDays: calc.totalWorkingDays,
+        payableDays: calc.payableDays,
+        presentDays: calc.presentDays,
+        paidLeaveDays: calc.paidLeaveDays,
+        earned: {
+          basic: calc.earnedBasic,
+          allowances: calc.earnedAllowances,
+          gross: calc.gross,
         },
-        net,
+        deductions: {
+          pfEmployee: calc.pfEmployee,
+          pfEmployer: calc.pfEmployer,
+          professionalTax: calc.professionalTax,
+        },
+        net: calc.net,
       };
 
       // Update payslip
@@ -596,18 +598,18 @@ export const payrollService = {
           userId: employee.userId,
           periodMonth: payrun.periodMonth,
           components,
-          basic: employee.basic,
-          allowancesTotal,
-          monthlyWage,
-          payableDays,
-          totalWorkingDays,
-          attendanceDaysAmount,
-          paidLeaveDaysAmount,
-          gross,
-          pfEmployee,
-          pfEmployer,
-          professionalTax,
-          net,
+          basic: calc.basic,
+          allowancesTotal: calc.allowancesTotal,
+          monthlyWage: calc.monthlyWage,
+          payableDays: calc.payableDays,
+          totalWorkingDays: calc.totalWorkingDays,
+          attendanceDaysAmount: 0, // Deprecated - using earned amounts instead
+          paidLeaveDaysAmount: 0, // Deprecated - using earned amounts instead
+          gross: calc.gross,
+          pfEmployee: calc.pfEmployee,
+          pfEmployer: calc.pfEmployer,
+          professionalTax: calc.professionalTax,
+          net: calc.net,
           status: 'computed',
         },
         companyId,
@@ -632,5 +634,19 @@ export const payrollService = {
    */
   async getMonthlyStats(companyId: string, months?: number) {
     return payrollRepo.getMonthlyStats(companyId, months);
+  },
+
+  /**
+   * Get average salary from latest finalized payrun
+   */
+  async getAverageSalary(companyId: string) {
+    return payrollRepo.getAverageSalary(companyId);
+  },
+
+  /**
+   * Get total cost from all finalized payruns
+   */
+  async getTotalCost(companyId: string) {
+    return payrollRepo.getTotalCost(companyId);
   },
 };

@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { hrmsApi, getErrorMessage } from '@/lib/api';
-import { PayrunCard } from '@/components/hrms/PayrunCard';
-import { Plus, Play, CheckCircle, XCircle } from 'lucide-react';
+import { hrmsApi, getErrorMessage, Payrun } from '@/lib/api';
+import { DataTableLite, Column } from '@/components/ui-ext/DataTableLite';
+import { StatusBadge } from '@/components/ui-ext/StatusBadge';
+import { Plus, Play, CheckCircle, XCircle, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function PayrunList() {
@@ -82,107 +82,198 @@ export function PayrunList() {
     createMutation.mutate(selectedMonth);
   };
 
-  const handleCompute = (payrunId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('Compute payslips for this payrun?')) {
-      computeMutation.mutate(payrunId);
-    }
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    type: 'compute' | 'validate' | 'cancel' | null;
+    payrunId: string | null;
+    payrunMonth?: string;
+  }>({
+    open: false,
+    type: null,
+    payrunId: null,
+  });
+
+  const handleCompute = (payrunId: string, payrunMonth: string) => {
+    setConfirmDialog({
+      open: true,
+      type: 'compute',
+      payrunId,
+      payrunMonth,
+    });
   };
 
-  const handleValidate = (payrunId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('Validate this payrun? This will mark it as done and lock the payslips.')) {
-      validateMutation.mutate(payrunId);
-    }
+  const handleValidate = (payrunId: string, payrunMonth: string) => {
+    setConfirmDialog({
+      open: true,
+      type: 'validate',
+      payrunId,
+      payrunMonth,
+    });
   };
 
-  const handleCancel = (payrunId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('Cancel this payrun? This action cannot be undone.')) {
-      cancelMutation.mutate(payrunId);
-    }
+  const handleCancel = (payrunId: string, payrunMonth: string) => {
+    setConfirmDialog({
+      open: true,
+      type: 'cancel',
+      payrunId,
+      payrunMonth,
+    });
   };
+
+  const handleConfirmAction = () => {
+    if (!confirmDialog.payrunId || !confirmDialog.type) return;
+
+    switch (confirmDialog.type) {
+      case 'compute':
+        computeMutation.mutate(confirmDialog.payrunId);
+        break;
+      case 'validate':
+        validateMutation.mutate(confirmDialog.payrunId);
+        break;
+      case 'cancel':
+        cancelMutation.mutate(confirmDialog.payrunId);
+        break;
+    }
+    setConfirmDialog({ open: false, type: null, payrunId: null });
+  };
+
+  // Format currency
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  // Define columns for DataTableLite
+  const columns: Column<Payrun>[] = [
+    {
+      key: 'month',
+      header: 'Month',
+      cell: (row) => (
+        <div>
+          <div className="font-medium">{row.month}</div>
+          <div className="text-xs text-muted-foreground">
+            {row.payslipsCount || row.employeesCount || 0} payslips
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (row) => {
+        const statusMap: Record<string, 'draft' | 'computed' | 'validated' | 'paid' | 'cancelled'> = {
+          'draft': 'draft',
+          'computed': 'computed',
+          'validated': 'validated',
+          'paid': 'paid',
+          'cancelled': 'cancelled',
+        };
+        return <StatusBadge status={statusMap[row.status] || 'neutral'}>{row.status.toUpperCase()}</StatusBadge>;
+      },
+    },
+    {
+      key: 'netTotal',
+      header: 'Net Total',
+      cell: (row) => (
+        <span className="font-medium">{formatCurrency(row.netTotal || 0)}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      cell: (row) => (
+        <div className="flex gap-2">
+          {(row.status === 'draft' || row.status === 'computed') && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCompute(row.id, row.month);
+              }}
+              disabled={computeMutation.isPending}
+              aria-label="Compute payrun"
+            >
+              <Play className="h-4 w-4 mr-1" />
+              Compute
+            </Button>
+          )}
+          {row.status === 'computed' && (
+            <Button
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleValidate(row.id, row.month);
+              }}
+              disabled={validateMutation.isPending}
+              aria-label="Validate payrun"
+            >
+              <CheckCircle className="h-4 w-4 mr-1" />
+              Validate
+            </Button>
+          )}
+          {(row.status === 'draft' || row.status === 'computed') && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCancel(row.id, row.month);
+              }}
+              disabled={cancelMutation.isPending}
+              aria-label="Cancel payrun"
+            >
+              <XCircle className="h-4 w-4 mr-1" />
+              Cancel
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Payruns</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage payroll runs and payslips
-          </p>
-        </div>
-        <Button onClick={() => setNewPayrunOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Payrun
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>All Payruns</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-center text-muted-foreground py-8">Loading...</p>
-          ) : payruns && payruns.length > 0 ? (
-            <div className="space-y-4">
-              {payruns.map((payrun) => (
-                <div key={payrun.id} className="relative">
-                  <PayrunCard
-                    payrun={payrun}
-                    onClick={() => navigate(`/hrms/payroll/payruns/${payrun.id}`)}
-                  />
-                  <div className="absolute top-4 right-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
-                    {(payrun.status === 'draft' || payrun.status === 'computed') && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => handleCompute(payrun.id, e)}
-                        disabled={computeMutation.isPending}
-                      >
-                        <Play className="h-4 w-4 mr-1" />
-                        Compute
-                      </Button>
-                    )}
-                    {payrun.status === 'computed' && (
-                      <Button
-                        size="sm"
-                        onClick={(e) => handleValidate(payrun.id, e)}
-                        disabled={validateMutation.isPending}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Validate
-                      </Button>
-                    )}
-                    {(payrun.status === 'draft' || payrun.status === 'computed') && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={(e) => handleCancel(payrun.id, e)}
-                        disabled={cancelMutation.isPending}
-                      >
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Cancel
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-center text-muted-foreground py-8">
-              No payruns found. Create your first payrun to get started.
+    <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Payruns</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Manage payroll runs and payslips
             </p>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+          <Button onClick={() => setNewPayrunOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Payrun
+          </Button>
+        </div>
+
+        <DataTableLite
+          data={payruns || []}
+          columns={columns}
+          isLoading={isLoading}
+          searchKey={(item) => `${item.month} ${item.status}`}
+          searchPlaceholder="Search payruns by month or status..."
+          emptyState={{
+            icon: <FileText className="h-12 w-12 text-muted-foreground" />,
+            title: 'No payruns found',
+            subtitle: 'Create your first payrun to get started.',
+            action: {
+              label: 'Create Payrun',
+              onClick: () => setNewPayrunOpen(true),
+            },
+          }}
+          onRowClick={(row) => navigate(`/hrms/payroll/payruns/${row.id}`)}
+        />
 
       {/* New Payrun Dialog */}
       <Dialog open={newPayrunOpen} onOpenChange={setNewPayrunOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Payrun</DialogTitle>
+            <DialogDescription>Generate a new payroll run for the selected month</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -193,6 +284,7 @@ export function PayrunList() {
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 disabled={createMutation.isPending}
+                aria-label="Select month for payrun"
               />
               <p className="text-sm text-muted-foreground">
                 Select the month for which you want to generate the payrun
@@ -214,6 +306,43 @@ export function PayrunList() {
               disabled={createMutation.isPending}
             >
               {createMutation.isPending ? 'Creating...' : 'Create Payrun'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Action Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {confirmDialog.type === 'compute' && 'Compute Payrun'}
+              {confirmDialog.type === 'validate' && 'Validate Payrun'}
+              {confirmDialog.type === 'cancel' && 'Cancel Payrun'}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmDialog.type === 'compute' && `Are you sure you want to compute payslips for ${confirmDialog.payrunMonth}?`}
+              {confirmDialog.type === 'validate' && `Are you sure you want to validate the payrun for ${confirmDialog.payrunMonth}? This will mark it as validated and lock the payslips.`}
+              {confirmDialog.type === 'cancel' && `Are you sure you want to cancel the payrun for ${confirmDialog.payrunMonth}? This action cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmDialog({ open: false, type: null, payrunId: null })}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant={confirmDialog.type === 'cancel' ? 'destructive' : 'default'}
+              onClick={handleConfirmAction}
+              disabled={computeMutation.isPending || validateMutation.isPending || cancelMutation.isPending}
+            >
+              {confirmDialog.type === 'compute' && (computeMutation.isPending ? 'Computing...' : 'Compute')}
+              {confirmDialog.type === 'validate' && (validateMutation.isPending ? 'Validating...' : 'Validate')}
+              {confirmDialog.type === 'cancel' && (cancelMutation.isPending ? 'Cancelling...' : 'Cancel')}
             </Button>
           </DialogFooter>
         </DialogContent>

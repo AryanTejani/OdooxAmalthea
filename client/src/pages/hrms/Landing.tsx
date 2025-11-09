@@ -4,25 +4,31 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 import { EmployeeCard, EmployeeGridItem } from '@/components/hrms/EmployeeCard';
 import { EmployeeProfileModal } from '@/components/hrms/EmployeeProfileModal';
-import { UserAvatarDropdown } from '@/components/hrms/UserAvatarDropdown';
+import { HRMSLayout } from '@/components/hrms/HRMSLayout';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui-ext/EmptyState';
+import { SkeletonCard } from '@/components/ui-ext/SkeletonCard';
 import { hrmsApi } from '@/lib/api';
 import { useWS } from '@/hooks/useWS';
-import { Search, Plus } from 'lucide-react';
+import { useDebouncedValue } from '@/hooks/useDebounce';
+import { Search, Plus, Users, Circle } from 'lucide-react';
 
 export function Landing() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [debouncedSearch] = useDebouncedValue(search, 300);
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeGridItem | null>(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
-  // Get employees grid with status
+  // Get employees grid with status (using debounced search)
   const { data: employees, isLoading, refetch: refetchEmployees } = useQuery({
-    queryKey: ['employees', 'grid', search],
-    queryFn: () => hrmsApi.getEmployeesGrid(search || undefined),
+    queryKey: ['employees', 'grid', debouncedSearch],
+    queryFn: () => hrmsApi.getEmployeesGrid(debouncedSearch || undefined),
   });
 
   // Subscribe to realtime updates for attendance, time logs, and leave requests
@@ -55,62 +61,81 @@ export function Landing() {
   const canCreateEmployees = user?.role === 'hr' || user?.role === 'admin';
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold text-gray-900">WorkZen HRMS</h1>
+    <HRMSLayout pageTitle="Employees">
+      <div className="space-y-6">
+        {/* Search and Action Bar */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1 relative max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search employees by name, email, or ID..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+              aria-label="Search employees"
+            />
           </div>
-          <div className="flex items-center gap-4">
-            {canCreateEmployees && (
-              <Button onClick={() => navigate('/hrms/employees')} variant="outline" size="sm">
-                <Plus className="mr-2 h-4 w-4" />
-                Add User
-              </Button>
-            )}
-            <UserAvatarDropdown />
-          </div>
-        </div>
-      </header>
-
-      <div className="flex">
-        {/* Main Content */}
-        <main className="flex-1 p-6">
-          {/* Search and Action Bar */}
-          <div className="mb-6 flex items-center gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search employees by name, email, or ID..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-          </div>
-
-          {/* Employees Grid */}
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
-            </div>
-          ) : employees && employees.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {employees.map((employee: EmployeeGridItem) => (
-                <EmployeeCard
-                  key={employee.id}
-                  employee={employee}
-                  onClick={() => handleEmployeeClick(employee)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">No employees found</p>
-            </div>
+          {canCreateEmployees && (
+            <Button onClick={() => navigate('/hrms/employees')} variant="default">
+              <Plus className="mr-2 h-4 w-4" />
+              Add User
+            </Button>
           )}
-        </main>
+        </div>
+
+        {/* Status Legend */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-6 flex-wrap">
+              <span className="text-sm font-medium text-muted-foreground">Status:</span>
+              <div className="flex items-center gap-2">
+                <Circle className="h-3 w-3 fill-green-500 text-green-500" />
+                <span className="text-sm">Present</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Circle className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                <span className="text-sm">Idle</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Circle className="h-3 w-3 fill-blue-500 text-blue-500" />
+                <span className="text-sm">On Leave</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Circle className="h-3 w-3 fill-red-500 text-red-500" />
+                <span className="text-sm">Absent</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Employees Grid */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <SkeletonCard key={i} showHeader={false} lines={2} />
+            ))}
+          </div>
+        ) : employees && employees.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {employees.map((employee: EmployeeGridItem) => (
+              <EmployeeCard
+                key={employee.id}
+                employee={employee}
+                onClick={() => handleEmployeeClick(employee)}
+              />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Users className="h-12 w-12 text-muted-foreground" />}
+            title="No employees found"
+            subtitle={search ? 'Try adjusting your search terms' : 'No employees to display'}
+            action={canCreateEmployees ? {
+              label: 'Add Employee',
+              onClick: () => navigate('/hrms/employees'),
+            } : undefined}
+          />
+        )}
       </div>
 
       {/* Employee Profile Modal */}
@@ -119,7 +144,7 @@ export function Landing() {
         onOpenChange={setProfileModalOpen}
         employee={selectedEmployee}
       />
-    </div>
+    </HRMSLayout>
   );
 }
 

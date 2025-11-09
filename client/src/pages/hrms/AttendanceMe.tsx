@@ -3,16 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { hrmsApi } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { DataTableLite, Column } from '@/components/ui-ext/DataTableLite';
+import { KpiCard } from '@/components/ui-ext/KpiCard';
+import { StatusBadge } from '@/components/ui-ext/StatusBadge';
+import { EmptyState } from '@/components/ui-ext/EmptyState';
+import { ChevronLeft, ChevronRight, Calendar, Clock, DollarSign, CheckCircle } from 'lucide-react';
 import { useWS } from '@/hooks/useWS';
 
 export function AttendanceMe() {
@@ -106,130 +102,173 @@ export function AttendanceMe() {
     },
   });
 
+  // Define columns for DataTableLite
+  type AttendanceDay = {
+    date: string;
+    in_at: string | null;
+    out_at: string | null;
+    work_hours: number;
+    extra_hours: number;
+    leave_type: string | null;
+    payable: boolean;
+  };
+
+  const columns: Column<AttendanceDay>[] = [
+    {
+      key: 'date',
+      header: 'Date',
+      cell: (row) => (
+        <div className="flex items-center gap-2">
+          <span>{formatDate(row.date)}</span>
+          {row.leave_type && (() => {
+            // Map leave types to valid status variants
+            const leaveTypeMap: Record<string, 'leave' | 'info' | 'warn'> = {
+              'casual': 'leave',
+              'sick': 'info',
+              'unpaid': 'warn',
+            };
+            const status = leaveTypeMap[row.leave_type.toLowerCase()] || 'leave';
+            return <StatusBadge status={status}>{row.leave_type}</StatusBadge>;
+          })()}
+          {!row.payable && row.work_hours > 0 && (
+            <StatusBadge status="danger" className="text-xs">Not Payable</StatusBadge>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'in_at',
+      header: 'Check In',
+      cell: (row) => <span>{formatTime(row.in_at)}</span>,
+    },
+    {
+      key: 'out_at',
+      header: 'Check Out',
+      cell: (row) => <span>{formatTime(row.out_at)}</span>,
+    },
+    {
+      key: 'work_hours',
+      header: 'Work Hours',
+      cell: (row) => (
+        <div className="text-right" title="Computed from activity tracker">
+          {formatHours(row.work_hours)}h
+        </div>
+      ),
+    },
+    {
+      key: 'extra_hours',
+      header: 'Extra Hours',
+      cell: (row) => (
+        <div className="text-right" title="Computed from activity tracker">
+          {formatHours(row.extra_hours)}h
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Attendance</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            View your attendance for the selected month
-          </p>
-        </div>
-      </div>
-
-      {/* Month Navigation and KPI Chips */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={goToPreviousMonth}
-                disabled={isLoading}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-3 py-2 border rounded-md"
-                disabled={isLoading}
-              >
-                {Array.from({ length: 12 }, (_, i) => {
-                  const date = new Date(today.getFullYear(), i, 1);
-                  const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                  return (
-                    <option key={monthStr} value={monthStr}>
-                      {date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    </option>
-                  );
-                })}
-              </select>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={goToNextMonth}
-                disabled={isLoading}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-            {attendance && (
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary" className="px-3 py-1">
-                  Leaves: {attendance.kpi.leave_days}
-                </Badge>
-                <Badge variant="outline" className="px-3 py-1">
-                  Working Days: {attendance.kpi.total_working_days}
-                </Badge>
-                <Badge variant="outline" className="px-3 py-1">
-                  Payable: {attendance.kpi.payable_days}
-                </Badge>
-              </div>
-            )}
+        {/* Header with Date Picker */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">My Attendance</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              View your attendance for the selected month
+            </p>
           </div>
-        </CardHeader>
-      </Card>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={goToPreviousMonth}
+              disabled={isLoading}
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              disabled={isLoading}
+              className="w-40"
+              aria-label="Select month"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={goToNextMonth}
+              disabled={isLoading || isCurrentMonth}
+              aria-label="Next month"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
 
-      {/* Attendance Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{getMonthName()}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-            </div>
-          ) : !attendance || attendance.days.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500">No attendance records for this month</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Check In</TableHead>
-                    <TableHead>Check Out</TableHead>
-                    <TableHead className="text-right">Work Hours</TableHead>
-                    <TableHead className="text-right">Extra Hours</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {attendance.days.map((day) => (
-                      <TableRow key={day.date} title="Computed from activity tracker">
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {formatDate(day.date)}
-                            {day.leave_type && (
-                              <Badge variant="secondary" className="text-xs">
-                                {day.leave_type}
-                              </Badge>
-                            )}
-                            {!day.payable && day.work_hours > 0 && (
-                              <Badge variant="destructive" className="text-xs">
-                                Not Payable
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{formatTime(day.in_at)}</TableCell>
-                        <TableCell>{formatTime(day.out_at)}</TableCell>
-                        <TableCell className="text-right">{formatHours(day.work_hours)}</TableCell>
-                        <TableCell className="text-right">{formatHours(day.extra_hours)}</TableCell>
-                      </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+        {/* KPI Cards */}
+        {attendance && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <KpiCard
+              label="Present Days"
+              value={attendance.kpi.present_days || 0}
+              icon={<CheckCircle className="h-5 w-5" />}
+              helpText="Days marked as present"
+            />
+            <KpiCard
+              label="Paid Leave"
+              value={attendance.kpi.leave_days || 0}
+              icon={<Calendar className="h-5 w-5" />}
+              helpText="Leave days taken"
+            />
+            <KpiCard
+              label="Working Days"
+              value={attendance.kpi.total_working_days || 0}
+              icon={<Clock className="h-5 w-5" />}
+              helpText="Total working days in month"
+            />
+            <KpiCard
+              label="Payable Days"
+              value={attendance.kpi.payable_days || 0}
+              icon={<DollarSign className="h-5 w-5" />}
+              helpText="Days eligible for payment"
+            />
+          </div>
+        )}
+
+        {/* Attendance Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{getMonthName()}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : !attendance || attendance.days.length === 0 ? (
+              <EmptyState
+                icon={<Calendar className="h-12 w-12 text-muted-foreground" />}
+                title="No attendance records"
+                subtitle="No attendance records found for this month."
+              />
+            ) : (
+              <DataTableLite
+                data={attendance.days}
+                columns={columns}
+                isLoading={false}
+                searchKey={(item) => `${item.date} ${item.leave_type || ''}`}
+                searchPlaceholder="Search by date or leave type..."
+                emptyState={{
+                  icon: <Calendar className="h-12 w-12 text-muted-foreground" />,
+                  title: 'No attendance records',
+                  subtitle: 'No records found for the selected month.',
+                }}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
   );
 }
 

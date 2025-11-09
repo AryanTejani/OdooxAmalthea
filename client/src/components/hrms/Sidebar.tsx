@@ -100,6 +100,20 @@ const navItems: NavItem[] = [
     icon: Users,
   },
   {
+    title: 'Reports',
+    href: '/hrms/reports',
+    icon: FileText,
+    roles: ['admin', 'hr', 'payroll'],
+    badge: 'Analytics',
+  },
+  {
+    title: 'Salary Statement Report',
+    href: '/hrms/reports/salary-statement',
+    icon: FileText,
+    roles: ['admin', 'payroll'],
+    badge: 'Payroll',
+  },
+  {
     title: 'Reset Passwords',
     href: '/hrms/reset-passwords',
     icon: Key,

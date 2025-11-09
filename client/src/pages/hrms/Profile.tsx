@@ -4,7 +4,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { useBrand } from '@/context/BrandContext';
 import { authApi, hrmsApi, companyApi, getErrorMessage } from '@/lib/api';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Edit2, X, Plus, Save, Building2 } from 'lucide-react';
+import { FormFooter } from '@/components/ui-ext/FormFooter';
+import { Loader2, Edit2, X, Plus, Save, Building2, CreditCard } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -20,14 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 export function Profile() {
   const { user: authUser, refreshUser } = useAuth();
@@ -340,10 +333,7 @@ export function Profile() {
   const showCompanyTab = user?.role === 'admin';
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold">My Profile</h1>
-      </div>
+    <div className="space-y-6">
 
       {/* Profile Header */}
       <Card>
@@ -528,7 +518,7 @@ export function Profile() {
               <CardTitle>Private Info</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="loginId">Login ID</Label>
                   <Input id="loginId" value={user.loginId || 'N/A'} disabled />
@@ -544,6 +534,7 @@ export function Profile() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="Enter phone number"
+                    aria-label="Phone number"
                   />
                 </div>
                 <div className="space-y-2">
@@ -553,6 +544,7 @@ export function Profile() {
                     value={userCompany}
                     onChange={(e) => setUserCompany(e.target.value)}
                     placeholder="Enter company"
+                    aria-label="Company"
                   />
                 </div>
                 <div className="space-y-2">
@@ -562,6 +554,7 @@ export function Profile() {
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
                     placeholder="Enter department"
+                    aria-label="Department"
                   />
                 </div>
                 <div className="space-y-2">
@@ -571,6 +564,7 @@ export function Profile() {
                     value={manager}
                     onChange={(e) => setManager(e.target.value)}
                     placeholder="Enter manager"
+                    aria-label="Manager"
                   />
                 </div>
                 <div className="space-y-2">
@@ -580,24 +574,88 @@ export function Profile() {
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     placeholder="Enter location"
+                    aria-label="Location"
                   />
                 </div>
               </div>
 
-              <Button
-                onClick={handleSavePrivateInfo}
-                disabled={updateProfileMutation.isPending}
-                className="w-full"
-              >
-                {updateProfileMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Changes'
-                )}
-              </Button>
+              {/* Bank Details Card */}
+              {user.employee && (
+                <Card className="mt-4">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <CreditCard className="h-5 w-5" />
+                      Bank Details
+                    </CardTitle>
+                    <CardDescription>Bank account information for payroll</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="bankName">Bank Name</Label>
+                        <Input
+                          id="bankName"
+                          value={'Not provided'}
+                          disabled
+                          aria-label="Bank name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="accountNumber">Account Number</Label>
+                        <Input
+                          id="accountNumber"
+                          value={'Not provided'}
+                          disabled
+                          aria-label="Account number (masked)"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Only last 4 digits are shown for security
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="ifsc">IFSC Code</Label>
+                        <Input
+                          id="ifsc"
+                          value={'Not provided'}
+                          disabled
+                          aria-label="IFSC code"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="branch">Branch</Label>
+                        <Input
+                          id="branch"
+                          value={'Not provided'}
+                          disabled
+                          aria-label="Branch"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Bank details can be updated by contacting HR or Admin
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              <FormFooter
+                primaryAction={{
+                  label: 'Save Changes',
+                  onClick: handleSavePrivateInfo,
+                  loading: updateProfileMutation.isPending,
+                }}
+                secondaryAction={{
+                  label: 'Cancel',
+                  onClick: () => {
+                    // Reset form to original values
+                    setPhone(user.phone || '');
+                    setUserCompany(user.company || '');
+                    setDepartment(user.department || '');
+                    setManager(user.manager || '');
+                    setLocation(user.location || '');
+                  },
+                }}
+              />
             </CardContent>
           </Card>
         </TabsContent>

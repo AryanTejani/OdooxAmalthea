@@ -473,3 +473,78 @@ export async function getMonthlyStatsController(req: Request, res: Response): Pr
     });
   }
 }
+
+export async function getReportsDataController(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.companyId) {
+      res.status(403).json({
+        error: {
+          code: 'NO_COMPANY',
+          message: 'User is not associated with a company',
+        },
+      });
+      return;
+    }
+
+    // Fetch each piece of data separately to identify which one fails
+    let monthlyStats;
+    let avgSalary;
+    let totalCost;
+
+    try {
+      monthlyStats = await payrollService.getMonthlyStats(req.companyId, 6);
+      logger.info({ companyId: req.companyId, monthlyStatsCount: monthlyStats.employerCost.length }, 'Monthly stats fetched');
+    } catch (error: any) {
+      logger.error({ error: error?.message || error, stack: error?.stack, companyId: req.companyId }, 'Failed to fetch monthly stats');
+      throw new Error(`Failed to fetch monthly stats: ${error?.message || String(error)}`);
+    }
+
+    try {
+      avgSalary = await payrollService.getAverageSalary(req.companyId);
+      logger.info({ companyId: req.companyId, avgSalary }, 'Average salary fetched');
+    } catch (error: any) {
+      logger.error({ error: error?.message || error, stack: error?.stack, companyId: req.companyId }, 'Failed to fetch average salary');
+      throw new Error(`Failed to fetch average salary: ${error?.message || String(error)}`);
+    }
+
+    try {
+      totalCost = await payrollService.getTotalCost(req.companyId);
+      logger.info({ companyId: req.companyId, totalCost }, 'Total cost fetched');
+    } catch (error: any) {
+      logger.error({ error: error?.message || error, stack: error?.stack, companyId: req.companyId }, 'Failed to fetch total cost');
+      throw new Error(`Failed to fetch total cost: ${error?.message || String(error)}`);
+    }
+    
+    logger.info(
+      { 
+        companyId: req.companyId,
+        monthlyStatsCount: monthlyStats.employerCost.length,
+        avgSalary,
+        totalCost,
+      },
+      'Reports data fetched successfully'
+    );
+    
+    res.json({ 
+      data: {
+        monthlyStats,
+        avgSalary,
+        totalCost,
+      }
+    });
+  } catch (error: any) {
+    const errorMessage = error?.message || String(error) || 'Unknown error';
+    const errorStack = error?.stack;
+    logger.error({ 
+      error: errorMessage, 
+      stack: errorStack, 
+      companyId: req.companyId 
+    }, 'Failed to get reports data');
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: errorMessage,
+      },
+    });
+  }
+}

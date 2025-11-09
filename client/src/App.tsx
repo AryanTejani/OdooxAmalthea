@@ -31,6 +31,8 @@ import { Timeline } from '@/pages/hrms/Timeline';
 import { TimeLogs } from '@/pages/hrms/TimeLogs';
 import { ResetPasswords } from '@/pages/hrms/ResetPasswords';
 import { SettingsUsers } from '@/pages/hrms/SettingsUsers';
+import { Reports } from '@/pages/hrms/Reports';
+import { SalaryStatementReport } from '@/pages/hrms/SalaryStatementReport';
 
 function App() {
   return (
@@ -41,6 +43,14 @@ function App() {
             <Routes>
               <Route
                 path="/"
+                element={
+                  <ProtectedRoute>
+                    <Landing />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/landing"
                 element={
                   <ProtectedRoute>
                     <Landing />
@@ -235,6 +245,26 @@ function App() {
                   <RoleProtectedRoute allowedRoles={['admin']} feature="User Access Settings">
                     <HRMSLayout>
                       <SettingsUsers />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/reports"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin', 'hr', 'payroll']} feature="Reports">
+                    <HRMSLayout>
+                      <Reports />
+                    </HRMSLayout>
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/hrms/reports/salary-statement"
+                element={
+                  <RoleProtectedRoute allowedRoles={['admin', 'payroll']} feature="Salary Statement Report">
+                    <HRMSLayout>
+                      <SalaryStatementReport />
                     </HRMSLayout>
                   </RoleProtectedRoute>
                 }

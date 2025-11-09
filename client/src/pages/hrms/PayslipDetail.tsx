@@ -220,66 +220,94 @@ export function PayslipDetail() {
           <CardTitle className="print:text-black print:text-lg">Salary Computation</CardTitle>
         </CardHeader>
         <CardContent className="print:p-4">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Component</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow className="font-semibold">
-                <TableCell colSpan={2}>Earnings</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="pl-8">Basic Salary</TableCell>
-                <TableCell className="text-right">{formatCurrency(payslip.basic)}</TableCell>
-              </TableRow>
-              {Object.entries(allowances).map(([key, value]) => (
-                <TableRow key={key}>
-                  <TableCell className="pl-8">{key}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(value as number)}</TableCell>
-                </TableRow>
-              ))}
-              <TableRow className="font-semibold bg-muted/30 print:bg-transparent">
-                <TableCell className="print:text-black">Monthly Wage</TableCell>
-                <TableCell className="text-right print:text-black">{formatCurrency(payslip.monthlyWage)}</TableCell>
-              </TableRow>
-              <TableRow className="font-semibold bg-green-50 print:bg-transparent">
-                <TableCell className="print:text-black">Gross Pay</TableCell>
-                <TableCell className="text-right text-green-600 print:text-black">
-                  {formatCurrency(payslip.gross)}
-                </TableCell>
-              </TableRow>
-              <TableRow className="font-semibold">
-                <TableCell colSpan={2} className="pt-4 print:text-black">Deductions</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="pl-8 print:text-black">PF Employee (12%)</TableCell>
-                <TableCell className="text-right text-red-600 print:text-black">
-                  {formatCurrency(payslip.pfEmployee)}
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="pl-8 print:text-black">Professional Tax</TableCell>
-                <TableCell className="text-right text-red-600 print:text-black">
-                  {formatCurrency(payslip.professionalTax)}
-                </TableCell>
-              </TableRow>
-              <TableRow className="font-bold text-lg bg-blue-50 print:bg-transparent">
-                <TableCell className="print:text-black">Net Pay</TableCell>
-                <TableCell className="text-right text-blue-600 print:text-black print:font-bold">
-                  {formatCurrency(payslip.net)}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-          <div className="mt-4 p-3 bg-muted/50 rounded-lg text-sm print:bg-transparent print:border print:p-2">
-            <p className="font-semibold print:text-black">Employer Contribution:</p>
-            <p className="text-muted-foreground print:text-gray-700">
-              PF Employer: {formatCurrency(payslip.pfEmployer)}
-            </p>
-          </div>
+          {payslip.gross === 0 ? (
+            <div className="p-4 bg-muted/50 rounded-lg text-sm print:bg-transparent print:border print:p-2">
+              <p className="font-semibold text-muted-foreground print:text-gray-700">
+                No payable days this month — PF and PT not applicable.
+              </p>
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Component</TableHead>
+                    <TableHead className="text-right">Monthly (Baseline)</TableHead>
+                    <TableHead className="text-right">Earned (Prorated)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow className="font-semibold">
+                    <TableCell colSpan={3}>Earnings</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="pl-8">Basic Salary</TableCell>
+                    <TableCell className="text-right text-muted-foreground print:text-gray-600">
+                      {formatCurrency(payslip.basic)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium print:text-black">
+                      {formatCurrency(components?.earned?.basic || 0)}
+                    </TableCell>
+                  </TableRow>
+                  {Object.entries(allowances).map(([key, value]) => (
+                    <TableRow key={key}>
+                      <TableCell className="pl-8">{key}</TableCell>
+                      <TableCell className="text-right text-muted-foreground print:text-gray-600">
+                        {formatCurrency(value as number)}
+                      </TableCell>
+                      <TableCell className="text-right font-medium print:text-black">
+                        {formatCurrency(components?.earned?.allowances?.[key] || 0)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="font-semibold bg-muted/30 print:bg-transparent">
+                    <TableCell className="print:text-black">Monthly Wage</TableCell>
+                    <TableCell className="text-right print:text-black">{formatCurrency(payslip.monthlyWage)}</TableCell>
+                    <TableCell className="text-right print:text-black">—</TableCell>
+                  </TableRow>
+                  <TableRow className="font-semibold bg-green-50 print:bg-transparent">
+                    <TableCell className="print:text-black">Gross Pay</TableCell>
+                    <TableCell className="text-right print:text-black">—</TableCell>
+                    <TableCell className="text-right text-green-600 print:text-black font-medium">
+                      {formatCurrency(payslip.gross)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow className="font-semibold">
+                    <TableCell colSpan={3} className="pt-4 print:text-black">Deductions</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="pl-8 print:text-black">
+                      PF Employee (12% of Earned Basic)
+                    </TableCell>
+                    <TableCell className="text-right print:text-black">—</TableCell>
+                    <TableCell className="text-right text-red-600 print:text-black">
+                      {formatCurrency(payslip.pfEmployee)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="pl-8 print:text-black">Professional Tax</TableCell>
+                    <TableCell className="text-right print:text-black">—</TableCell>
+                    <TableCell className="text-right text-red-600 print:text-black">
+                      {formatCurrency(payslip.professionalTax)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow className="font-bold text-lg bg-blue-50 print:bg-transparent">
+                    <TableCell className="print:text-black">Net Pay</TableCell>
+                    <TableCell className="text-right print:text-black">—</TableCell>
+                    <TableCell className="text-right text-blue-600 print:text-black print:font-bold">
+                      {formatCurrency(payslip.net)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <div className="mt-4 p-3 bg-muted/50 rounded-lg text-sm print:bg-transparent print:border print:p-2">
+                <p className="font-semibold print:text-black">Employer Contribution:</p>
+                <p className="text-muted-foreground print:text-gray-700">
+                  PF Employer: {formatCurrency(payslip.pfEmployer)} (not deducted from employee net)
+                </p>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

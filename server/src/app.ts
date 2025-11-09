@@ -20,6 +20,7 @@ import adminRoutes from './modules/admin/admin.routes';
 import uploadRoutes from './modules/upload/upload.routes';
 import saasRoutes from './modules/saas/saas.routes';
 import companyRoutes from './modules/company/company.routes';
+import reportsRoutes from './modules/reports/reports.routes';
 import { healthCheck } from './libs/db';
 import { logger } from './config/logger';
 
@@ -69,6 +70,7 @@ app.use('/api/time-tracking', timeTrackingRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/reports', reportsRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

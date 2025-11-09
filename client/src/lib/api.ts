@@ -702,6 +702,27 @@ export const hrmsApi = {
     return response.data.data;
   },
 
+  getReportsData: async (): Promise<{
+    monthlyStats: {
+      employerCost: Array<{ month: string; cost: number }>;
+      employeeCount: Array<{ month: string; count: number }>;
+    };
+    avgSalary: number | null;
+    totalCost: number;
+  }> => {
+    const response = await api.get<{
+      data: {
+        monthlyStats: {
+          employerCost: Array<{ month: string; cost: number }>;
+          employeeCount: Array<{ month: string; count: number }>;
+        };
+        avgSalary: number | null;
+        totalCost: number;
+      };
+    }>('/api/payroll/reports');
+    return response.data.data;
+  },
+
   // Salary Management
   getSalaryConfigs: async (): Promise<SalaryConfig[]> => {
     const response = await api.get<{ data: SalaryConfig[] }>('/api/salary');
@@ -883,6 +904,54 @@ export const hrmsApi = {
     professionalTax?: number;
   }): Promise<any> => {
     const response = await api.put<{ data: any }>(`/api/employees/${employeeId}/configuration`, data);
+    return response.data.data;
+  },
+};
+
+// Reports API
+export const reportsApi = {
+  // Get list of employees for report selection
+  getReportEmployees: async (): Promise<Array<{
+    id: string;
+    name: string;
+    title: string | null;
+  }>> => {
+    const response = await api.get<{ data: Array<{
+      id: string;
+      name: string;
+      title: string | null;
+    }> }>('/api/reports/employees');
+    return response.data.data;
+  },
+
+  // Get salary statement for an employee and year
+  getSalaryStatement: async (employeeId: string, year: number): Promise<{
+    employee: {
+      id: string;
+      name: string;
+      title: string | null;
+      dateOfJoining: string | null;
+      salaryEffectiveFrom: string | null;
+    };
+    earnings: Array<{
+      key: string;
+      monthly: number;
+      yearly: number;
+    }>;
+    deductions: Array<{
+      key: string;
+      monthly: number;
+      yearly: number;
+    }>;
+    netSalary: {
+      monthly: number;
+      yearly: number;
+    };
+    estimatedMonths: string[];
+  }> => {
+    const response = await api.get<{ data: any }>('/api/reports/salary-statement', {
+      params: { employeeId, year },
+    });
     return response.data.data;
   },
 };

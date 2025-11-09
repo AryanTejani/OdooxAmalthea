@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,9 +20,21 @@ import { useWS } from '@/hooks/useWS';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Upload, X, FileText, Loader2, ExternalLink } from 'lucide-react';
+import { Upload, X, FileText, Loader2, ExternalLink, Calendar, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { DataTableLite, Column } from '@/components/ui-ext/DataTableLite';
+import { StatusBadge } from '@/components/ui-ext/StatusBadge';
+import { EmptyState } from '@/components/ui-ext/EmptyState';
+
+// Helper function to calculate days between dates
+function calculateDays(startDate: string, endDate: string): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays + 1; // Include both start and end dates
+}
 
 const leaveRequestSchema = z.object({
   type: z.enum(['CASUAL', 'SICK', 'UNPAID'], {
@@ -48,7 +60,7 @@ export function Leave() {
   const [newLeaveOpen, setNewLeaveOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingLeave, setEditingLeave] = useState<LeaveRequest | null>(null);
-  const { data: myLeaves, refetch: refetchMyLeaves } = useQuery({
+  const { data: myLeaves, isLoading, refetch: refetchMyLeaves } = useQuery({
     queryKey: ['leave', 'mine'],
     queryFn: () => hrmsApi.getMyLeaveRequests(),
   });
@@ -255,115 +267,162 @@ export function Leave() {
   // HR Officer, Payroll Officer (manager), and Admin can approve leaves
   const canManageLeaves = user?.role === 'hr' || user?.role === 'payroll' || user?.role === 'admin';
 
-  return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Leave Management</h1>
-        <div className="flex gap-2">
-          {canManageLeaves && (
-            <Button variant="outline" onClick={() => navigate('/hrms/leave/approvals')}>
-              View Approvals
-            </Button>
-          )}
-          <Button onClick={() => setNewLeaveOpen(true)}>New Leave Request</Button>
-        </div>
-      </div>
+  // Calculate leave balances (mock - replace with actual API call if available)
+  const leaveBalances = {
+    paid: 12, // Casual + Sick
+    sick: 5,
+    casual: 7,
+  };
 
-      <div className="space-y-4">
-        {myLeaves && myLeaves.length > 0 && (
-          <div className="space-y-2">
-            {myLeaves.map((leave) => (
-              <Card key={leave.id}>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Type</p>
-                        <p className="font-medium">{leave.type}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Start Date</p>
-                        <p className="font-medium">{new Date(leave.startDate).toLocaleDateString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">End Date</p>
-                        <p className="font-medium">{new Date(leave.endDate).toLocaleDateString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Status</p>
-                        <Badge variant={leave.status === 'APPROVED' ? 'default' : leave.status === 'REJECTED' ? 'destructive' : 'outline'}>
-                          {leave.status}
-                        </Badge>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Attachment</p>
-                        {leave.attachmentUrl ? (
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4" />
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => window.open(leave.attachmentUrl!, '_blank')}
-                              className="h-7 px-2"
-                            >
-                              <ExternalLink className="h-3 w-3 mr-1" />
-                              View
-                            </Button>
-                            {leave.status === 'PENDING' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingLeave(leave);
-                                  setEditDialogOpen(true);
-                                }}
-                                className="h-7 px-2 text-destructive"
-                              >
-                                <X className="h-3 w-3 mr-1" />
-                                Remove
-                              </Button>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">No attachment</span>
-                        )}
-                      </div>
-                    </div>
-                    {leave.status === 'PENDING' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setEditingLeave(leave);
-                          setEditDialogOpen(true);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                    )}
-                  </div>
-                  <div className="mt-4">
-                    <p className="text-sm text-muted-foreground">Reason</p>
-                    <p className="text-sm">{leave.reason}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+  // Define columns for DataTableLite
+  const columns: Column<LeaveRequest>[] = [
+    {
+      key: 'type',
+      header: 'Type',
+      cell: (row) => (
+        <span className="font-medium">{row.type}</span>
+      ),
+    },
+    {
+      key: 'dates',
+      header: 'Dates',
+      cell: (row) => {
+        const days = calculateDays(row.startDate, row.endDate);
+        return (
+          <div>
+            <div className="text-sm">
+              {new Date(row.startDate).toLocaleDateString()} - {new Date(row.endDate).toLocaleDateString()}
+            </div>
+            <div className="text-xs text-muted-foreground">{days} day{days !== 1 ? 's' : ''}</div>
           </div>
-        )}
-        {(!myLeaves || myLeaves.length === 0) && (
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-center text-muted-foreground">No leave requests</p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+        );
+      },
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (row) => {
+        const statusMap: Record<string, 'pending' | 'approved' | 'rejected'> = {
+          'PENDING': 'pending',
+          'APPROVED': 'approved',
+          'REJECTED': 'rejected',
+        };
+        return <StatusBadge status={statusMap[row.status]}>{row.status}</StatusBadge>;
+      },
+    },
+    {
+      key: 'reason',
+      header: 'Reason',
+      cell: (row) => (
+        <div className="max-w-xs">
+          <p className="text-sm truncate" title={row.reason}>{row.reason}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'attachment',
+      header: 'Attachment',
+      cell: (row) => (
+        row.attachmentUrl ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => window.open(row.attachmentUrl!, '_blank')}
+            className="h-8"
+            aria-label="View attachment"
+          >
+            <FileText className="h-4 w-4 mr-1" />
+            View
+          </Button>
+        ) : (
+          <span className="text-sm text-muted-foreground">No attachment</span>
+        )
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      cell: (row) => (
+        row.status === 'PENDING' ? (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setEditingLeave(row);
+                setEditDialogOpen(true);
+              }}
+            >
+              Edit
+            </Button>
+          </div>
+        ) : null
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Leave Requests</h1>
+            <p className="text-sm text-muted-foreground mt-1">Manage your leave requests and balances</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {canManageLeaves && (
+              <Button variant="outline" onClick={() => navigate('/hrms/leave/approvals')}>
+                View Approvals
+              </Button>
+            )}
+            <Button onClick={() => setNewLeaveOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Request
+            </Button>
+          </div>
+        </div>
+
+        {/* Leave Balance Chips */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-6 flex-wrap">
+              <span className="text-sm font-medium text-muted-foreground">Leave Balance:</span>
+              <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                Paid: {leaveBalances.paid}d
+              </Badge>
+              <Badge variant="default" className="bg-blue-100 text-blue-800 border-blue-200">
+                Sick: {leaveBalances.sick}d
+              </Badge>
+              <Badge variant="default" className="bg-purple-100 text-purple-800 border-purple-200">
+                Casual: {leaveBalances.casual}d
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Leave Requests Table */}
+        <DataTableLite
+          data={myLeaves || []}
+          columns={columns}
+          isLoading={isLoading}
+          searchKey={(item) => `${item.type} ${item.reason} ${item.status}`}
+          searchPlaceholder="Search leave requests..."
+          emptyState={{
+            icon: <Calendar className="h-12 w-12 text-muted-foreground" />,
+            title: 'No leave requests',
+            subtitle: 'You haven\'t submitted any leave requests yet.',
+            action: {
+              label: 'New Request',
+              onClick: () => setNewLeaveOpen(true),
+            },
+          }}
+        />
 
       <Dialog open={newLeaveOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>New Leave Request</DialogTitle>
+            <DialogDescription>Submit a new leave request with details and attachment</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
@@ -474,9 +533,10 @@ export function Leave() {
       </Dialog>
 
       <Dialog open={editDialogOpen} onOpenChange={handleEditDialogOpenChange}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Leave Request</DialogTitle>
+            <DialogDescription>Update attachment for your pending leave request</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -576,7 +636,6 @@ export function Leave() {
           </div>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }

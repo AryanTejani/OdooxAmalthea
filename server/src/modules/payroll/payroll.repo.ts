@@ -1,6 +1,7 @@
 import { query } from '../../libs/db';
 import { Payrun, Payslip, PayrunStatus, PayrollWarnings } from '../../domain/types';
 import { PoolClient } from 'pg';
+import { logger } from '../../config/logger';
 
 // Extended interfaces for repo operations
 export interface PayrunWithCount extends Payrun {
@@ -683,49 +684,166 @@ export async function getMonthlyStats(
   employerCost: Array<{ month: string; cost: number }>;
   employeeCount: Array<{ month: string; count: number }>;
 }> {
-  // Get employer cost (gross_total + sum of pf_employer from payslips) for last N months
-  const costQuery = `
-    SELECT 
-      TO_CHAR(p.period_month, 'Mon') as month,
-      COALESCE(p.gross_total, 0) + COALESCE(
-        (SELECT SUM(pf_employer) FROM payslips WHERE payrun_id = p.id), 0
-      ) as cost
-    FROM payruns p
-    WHERE p.company_id = $1
-      AND p.status = 'done'
-      AND p.period_month >= (CURRENT_DATE - INTERVAL '${months} months')
-    ORDER BY p.period_month ASC
-    LIMIT $2
-  `;
+  try {
+    // Calculate the start date for the query (N months ago from start of current month)
+    const startDate = new Date();
+    startDate.setDate(1); // Start of current month
+    startDate.setMonth(startDate.getMonth() - months);
+    const startDateStr = startDate.toISOString().split('T')[0];
 
-  // Get employee count for last N months
-  const countQuery = `
-    SELECT 
-      TO_CHAR(period_month, 'Mon') as month,
-      employees_count as count
-    FROM payruns
-    WHERE company_id = $1
-      AND status = 'done'
-      AND period_month >= (CURRENT_DATE - INTERVAL '${months} months')
-    ORDER BY period_month ASC
-    LIMIT $2
-  `;
+    // Get employer cost (gross_total + sum of pf_employer from payslips) for last N months
+    // Include payruns with status 'computed', 'validated', or 'done' to show more data
+    const costQuery = `
+      SELECT 
+        TO_CHAR(p.period_month, 'Mon') as month,
+        TO_CHAR(p.period_month, 'YYYY-MM') as period,
+        COALESCE(p.gross_total, 0) + COALESCE(
+          (SELECT SUM(pf_employer) FROM payslips WHERE payrun_id = p.id), 0
+        ) as cost
+      FROM payruns p
+      WHERE p.company_id = $1
+        AND p.status IN ('computed', 'validated', 'done')
+        AND p.period_month >= $2::date
+      ORDER BY p.period_month DESC
+      LIMIT $3
+    `;
 
-  const [costResult, countResult] = await Promise.all([
-    query<{ month: string; cost: string }>(costQuery, [companyId, months]),
-    query<{ month: string; count: number }>(countQuery, [companyId, months]),
-  ]);
+    // Get employee count for last N months
+    const countQuery = `
+      SELECT 
+        TO_CHAR(period_month, 'Mon') as month,
+        TO_CHAR(period_month, 'YYYY-MM') as period,
+        employees_count as count
+      FROM payruns
+      WHERE company_id = $1
+        AND status IN ('computed', 'validated', 'done')
+        AND period_month >= $2::date
+      ORDER BY period_month DESC
+      LIMIT $3
+    `;
 
-  return {
-    employerCost: costResult.rows.map(row => ({
-      month: row.month,
-      cost: parseFloat(row.cost),
-    })),
-    employeeCount: countResult.rows.map(row => ({
-      month: row.month,
-      count: row.count,
-    })),
-  };
+    const [costResult, countResult] = await Promise.all([
+      query<{ month: string; period: string; cost: string }>(costQuery, [companyId, startDateStr, months]),
+      query<{ month: string; period: string; count: number }>(countQuery, [companyId, startDateStr, months]),
+    ]);
+
+    // Reverse to show oldest first
+    return {
+      employerCost: costResult.rows.reverse().map(row => ({
+        month: row.month || '',
+        cost: parseFloat(String(row.cost || '0')) || 0,
+      })),
+      employeeCount: countResult.rows.reverse().map(row => ({
+        month: row.month || '',
+        count: Number(row.count) || 0,
+      })),
+    };
+  } catch (error: any) {
+    // Log error and return empty arrays to prevent breaking the reports page
+    logger.error({ 
+      error: error?.message || String(error), 
+      stack: error?.stack,
+      companyId,
+      months 
+    }, 'Error in getMonthlyStats');
+    return {
+      employerCost: [],
+      employeeCount: [],
+    };
+  }
+}
+
+/**
+ * Get average salary from latest finalized payrun's payslips
+ */
+export async function getAverageSalary(
+  companyId: string
+): Promise<number | null> {
+  try {
+    // Get the latest finalized payrun
+    const payrunResult = await query(
+      `SELECT id 
+       FROM payruns
+       WHERE company_id = $1
+         AND status IN ('computed', 'validated', 'done')
+       ORDER BY period_month DESC
+       LIMIT 1`,
+      [companyId]
+    );
+
+    if (payrunResult.rows.length === 0) {
+      return null;
+    }
+
+    const payrunId = payrunResult.rows[0].id;
+
+    // Calculate average net salary from payslips
+    const avgResult = await query(
+      `SELECT AVG(net) as avg_net
+       FROM payslips
+       WHERE payrun_id = $1 AND company_id = $2`,
+      [payrunId, companyId]
+    );
+
+    const avgNet = avgResult.rows[0]?.avg_net;
+    if (avgNet === null || avgNet === undefined) {
+      return null;
+    }
+
+    return parseFloat(String(avgNet)) || null;
+  } catch (error: any) {
+    // Log error and return null to prevent breaking the reports page
+    logger.error({ 
+      error: error?.message || String(error), 
+      stack: error?.stack,
+      companyId 
+    }, 'Error in getAverageSalary');
+    return null;
+  }
+}
+
+/**
+ * Get total cost (latest month's employer cost from finalized payruns)
+ */
+export async function getTotalCost(
+  companyId: string
+): Promise<number> {
+  try {
+    // Get the latest finalized payrun's employer cost
+    const result = await query(
+      `SELECT 
+         COALESCE(p.gross_total, 0) + COALESCE(
+           (SELECT SUM(ps.pf_employer) 
+            FROM payslips ps
+            WHERE ps.payrun_id = p.id), 0
+         ) as cost
+       FROM payruns p
+       WHERE p.company_id = $1
+         AND p.status IN ('computed', 'validated', 'done')
+       ORDER BY p.period_month DESC
+       LIMIT 1`,
+      [companyId]
+    );
+
+    if (result.rows.length === 0) {
+      return 0;
+    }
+
+    const costValue = result.rows[0]?.cost;
+    if (costValue === null || costValue === undefined) {
+      return 0;
+    }
+
+    return parseFloat(String(costValue)) || 0;
+  } catch (error: any) {
+    // Log error and return 0 to prevent breaking the reports page
+    logger.error({ 
+      error: error?.message || String(error), 
+      stack: error?.stack,
+      companyId 
+    }, 'Error in getTotalCost');
+    return 0;
+  }
 }
 
 export const payrollRepo = {
@@ -744,4 +862,6 @@ export const payrollRepo = {
   getEmployeesWithoutManager,
   getPayrollWarnings,
   getMonthlyStats,
+  getAverageSalary,
+  getTotalCost,
 };

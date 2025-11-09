@@ -2,18 +2,13 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthContext';
 import { hrmsApi, getErrorMessage } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Loader2, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { DataTableLite, Column } from '@/components/ui-ext/DataTableLite';
+import { KpiCard } from '@/components/ui-ext/KpiCard';
+import { EmptyState } from '@/components/ui-ext/EmptyState';
+import { ChevronLeft, ChevronRight, Users, Clock, TrendingUp } from 'lucide-react';
 import { useWS } from '@/hooks/useWS';
 import { useDebouncedValue } from '@/hooks/useDebounce';
 
@@ -104,126 +99,171 @@ export function AttendanceAdmin() {
     },
   });
 
+  // Calculate KPIs
+  const presentCount = attendance?.filter(row => row.in_at !== null).length || 0;
+  const totalEmployees = attendance?.length || 0;
+  const avgWorkHours = attendance && attendance.length > 0
+    ? (attendance.reduce((sum, row) => sum + row.work_hours, 0) / attendance.length).toFixed(2)
+    : '0.00';
+  const totalExtraHours = attendance?.reduce((sum, row) => sum + row.extra_hours, 0).toFixed(2) || '0.00';
+
+  // Define columns for DataTableLite
+  type AttendanceRow = {
+    employee_id: string;
+    name: string;
+    login_id: string | null;
+    in_at: string | null;
+    out_at: string | null;
+    work_hours: number;
+    extra_hours: number;
+  };
+
+  const columns: Column<AttendanceRow>[] = [
+    {
+      key: 'employee',
+      header: 'Employee',
+      cell: (row) => (
+        <div>
+          <div className="font-medium">{row.name}</div>
+          {row.login_id && (
+            <div className="text-xs text-muted-foreground">{row.login_id}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'in_at',
+      header: 'Check In',
+      cell: (row) => <span>{formatTime(row.in_at)}</span>,
+    },
+    {
+      key: 'out_at',
+      header: 'Check Out',
+      cell: (row) => <span>{formatTime(row.out_at)}</span>,
+    },
+    {
+      key: 'work_hours',
+      header: 'Work Hours',
+      cell: (row) => (
+        <div className="text-right" title="Computed from activity tracker">
+          {formatHours(row.work_hours)}h
+        </div>
+      ),
+    },
+    {
+      key: 'extra_hours',
+      header: 'Extra Hours',
+      cell: (row) => (
+        <div className="text-right" title="Computed from activity tracker">
+          {formatHours(row.extra_hours)}h
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Attendance</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            View attendance for all employees
-          </p>
-        </div>
-      </div>
-
-      {/* Search and Date Navigation */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div className="flex items-center gap-2 flex-1 max-w-md">
-              <Search className="h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search by name, email, or login ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={goToPreviousDay}
-                disabled={isLoading}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-40"
-                disabled={isLoading}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={goToNextDay}
-                disabled={isLoading}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={goToToday}
-                disabled={isLoading}
-              >
-                Day
-              </Button>
-            </div>
+        {/* Header with Date Picker */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Attendance Overview</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              View attendance for all employees by date
+            </p>
           </div>
-        </CardHeader>
-      </Card>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={goToPreviousDay}
+              disabled={isLoading}
+              aria-label="Previous day"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-40"
+              disabled={isLoading}
+              aria-label="Select date"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={goToNextDay}
+              disabled={isLoading}
+              aria-label="Next day"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={goToToday}
+              disabled={isLoading || selectedDate === todayStr}
+              aria-label="Go to today"
+            >
+              Today
+            </Button>
+          </div>
+        </div>
 
-      {/* Attendance Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {formatDate(dateObj)}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-            </div>
-          ) : !attendance || attendance.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500">
-                {debouncedSearch
+        {/* KPI Cards */}
+        {attendance && attendance.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <KpiCard
+              label="Present"
+              value={presentCount}
+              icon={<Users className="h-5 w-5" />}
+              helpText={`Out of ${totalEmployees} employees`}
+            />
+            <KpiCard
+              label="Total Employees"
+              value={totalEmployees}
+              icon={<Users className="h-5 w-5" />}
+              helpText="Employees tracked"
+            />
+            <KpiCard
+              label="Avg Work Hours"
+              value={`${avgWorkHours}h`}
+              icon={<Clock className="h-5 w-5" />}
+              helpText="Average hours worked"
+            />
+            <KpiCard
+              label="Total Extra Hours"
+              value={`${totalExtraHours}h`}
+              icon={<TrendingUp className="h-5 w-5" />}
+              helpText="Total overtime hours"
+            />
+          </div>
+        )}
+
+        {/* Attendance Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{formatDate(dateObj)}</CardTitle>
+            <CardDescription>Employee attendance for the selected date</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DataTableLite
+              data={attendance || []}
+              columns={columns}
+              isLoading={isLoading}
+              searchKey={(item) => `${item.name} ${item.login_id || ''}`}
+              searchPlaceholder="Search employees..."
+              emptyState={{
+                icon: <Users className="h-12 w-12 text-muted-foreground" />,
+                title: 'No attendance records',
+                subtitle: debouncedSearch
                   ? 'No employees found matching your search'
-                  : 'No attendance records for this day'}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Check In</TableHead>
-                    <TableHead>Check Out</TableHead>
-                    <TableHead className="text-right">Work Hours</TableHead>
-                    <TableHead className="text-right">Extra Hours</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {attendance.map((row) => (
-                    <TableRow key={row.employee_id}>
-                      <TableCell className="font-medium">
-                        <div>
-                          <div>{row.name}</div>
-                          {row.login_id && (
-                            <div className="text-sm text-muted-foreground">
-                              {row.login_id}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatTime(row.in_at)}</TableCell>
-                      <TableCell>{formatTime(row.out_at)}</TableCell>
-                      <TableCell className="text-right">{formatHours(row.work_hours)}</TableCell>
-                      <TableCell className="text-right">{formatHours(row.extra_hours)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                  : 'No attendance records found for this day.',
+              }}
+            />
+          </CardContent>
+        </Card>
+      </div>
   );
 }
 

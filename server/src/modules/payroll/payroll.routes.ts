@@ -84,4 +84,11 @@ router.get(
   payrollController.getMonthlyStatsController
 );
 
+// Get reports data (admin|payroll|hr only)
+router.get(
+  '/reports',
+  requireRole(['admin', 'payroll', 'hr']),
+  payrollController.getReportsDataController
+);
+
 export default router;
