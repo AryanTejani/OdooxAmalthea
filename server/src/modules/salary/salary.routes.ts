@@ -44,10 +44,10 @@ router.put(
   salaryController.updateSalaryConfig
 );
 
-// Delete salary configuration (admin only)
+// Delete salary configuration (admin|payroll only)
 router.delete(
   '/:employeeId',
-  requireRole(['admin']),
+  requireRole(['admin', 'payroll']),
   salaryController.deleteSalaryConfig
 );
 

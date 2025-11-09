@@ -13,7 +13,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { FormFooter } from '@/components/ui-ext/FormFooter';
-import { Loader2, Edit2, X, Plus, Save, Building2, CreditCard } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Loader2, Edit2, X, Plus, Save, Building2, CreditCard, Trash2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -57,6 +58,7 @@ export function Profile() {
   // For employees/HR: always use own employee ID
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [editingSalary, setEditingSalary] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   
   // Salary edit form state
   const [editBasic, setEditBasic] = useState<number>(0);
@@ -138,6 +140,27 @@ export function Profile() {
       queryClient.invalidateQueries({ queryKey: ['employee', 'salary-config', variables.employeeId] });
       toast.success('Salary configuration updated successfully');
       setEditingSalary(false);
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  // Salary delete mutation
+  const deleteSalaryMutation = useMutation({
+    mutationFn: async (employeeId: string) => {
+      return hrmsApi.deleteSalaryConfig(employeeId);
+    },
+    onSuccess: (_, employeeId) => {
+      queryClient.invalidateQueries({ queryKey: ['employee', 'salary-config', employeeId] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      toast.success('Salary configuration deleted successfully');
+      // Reset to first employee or null if no employees
+      if (employees && employees.length > 0) {
+        setSelectedEmployeeId(employees[0].id);
+      } else {
+        setSelectedEmployeeId(null);
+      }
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));
@@ -302,7 +325,7 @@ export function Profile() {
     }
     
     const allowances: Record<string, number> = {};
-    if (editHRA > 0) allowances.HRA = editHRA;
+    if (editHRA > 0) allowances.hra = editHRA;
     if (editStandardAllowance > 0) allowances.standardAllowance = editStandardAllowance;
     if (editPerformanceBonus > 0) allowances.performanceBonus = editPerformanceBonus;
     if (editLTA > 0) allowances.lta = editLTA;
@@ -675,10 +698,20 @@ export function Profile() {
                     </p>
                   </div>
                   {canEditSalary && !editingSalary && salaryConfig && (
-                    <Button onClick={() => setEditingSalary(true)}>
-                      <Edit2 className="h-4 w-4 mr-2" />
-                      Edit Salary
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button onClick={() => setEditingSalary(true)}>
+                        <Edit2 className="h-4 w-4 mr-2" />
+                        Edit Salary
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        onClick={() => setDeleteConfirmOpen(true)}
+                        disabled={deleteSalaryMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </Button>
+                    </div>
                   )}
                   {canEditSalary && editingSalary && (
                     <div className="flex gap-2">
@@ -1304,6 +1337,51 @@ export function Profile() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Delete Salary Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Salary Configuration</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the salary configuration for this employee? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={deleteSalaryMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (employeeIdForSalary) {
+                  deleteSalaryMutation.mutate(employeeIdForSalary);
+                  setDeleteConfirmOpen(false);
+                }
+              }}
+              disabled={deleteSalaryMutation.isPending || !employeeIdForSalary}
+            >
+              {deleteSalaryMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
