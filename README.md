@@ -1,3 +1,6 @@
+# Video Link - https://drive.google.com/drive/folders/1HlvyJt2l7T5UB2gs_pb-p5hCaEqLraw-
+
+
 # WorkZen - Complete HRMS (Human Resource Management System)
 
 A comprehensive, production-ready Human Resource Management System built with modern web technologies. WorkZen provides a complete solution for managing employees, attendance, leaves, payroll, time tracking, and more, with real-time updates and role-based access control.
