@@ -92,7 +92,7 @@ export function SaasSignup() {
           <Alert>
             <InfoIcon className="h-4 w-4" />
             <AlertDescription>
-              Your company code will be auto-generated if not provided. It must be 2-6 uppercase letters or numbers.
+              Your company code must be 2-6 uppercase letters.
             </AlertDescription>
           </Alert>
 
@@ -112,11 +112,11 @@ export function SaasSignup() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="companyCode">Company Code (Optional)</Label>
+              <Label htmlFor="companyCode">Company Code*</Label>
               <Input
                 id="companyCode"
                 type="text"
-                placeholder="ACME (auto-generated if empty)"
+                placeholder=""
                 {...register('companyCode')}
                 disabled={isLoading}
                 style={{ textTransform: 'uppercase' }}
